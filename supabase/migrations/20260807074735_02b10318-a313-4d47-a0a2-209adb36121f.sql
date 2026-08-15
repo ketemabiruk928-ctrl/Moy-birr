@@ -1,0 +1,4 @@
+CREATE POLICY "Hotel media readable by signed in users" ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'hotel-media');
+CREATE POLICY "Owners upload own hotel media" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'hotel-media' AND (storage.foldername(name))[1] = auth.uid()::text);
+CREATE POLICY "Owners update own hotel media" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'hotel-media' AND (storage.foldername(name))[1] = auth.uid()::text);
+CREATE POLICY "Owners delete own hotel media" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'hotel-media' AND (storage.foldername(name))[1] = auth.uid()::text);

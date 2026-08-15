@@ -1,0 +1,10 @@
+REVOKE EXECUTE ON FUNCTION public.wallet_deposit(numeric, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.wallet_withdraw(numeric, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.wallet_transfer(text, numeric, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.pay_service(uuid, uuid, numeric, numeric) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.book_hotel(uuid, date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.cancel_booking(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.rate_staff(uuid, uuid, integer, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.post_job(uuid, text, text, text, numeric) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.subscribe_premium() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) FROM anon;
