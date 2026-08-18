@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+    import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,23 +12,15 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-// Deliberately a route inside the same app, not a separate codebase: it
-// reuses the exact same auth session and the exact same RLS/RPC security
-// model as everything else, instead of standing up a second app with its
-// own login (and its own attack surface) that has to be kept in sync by
-// hand. Access is gated server-side - admin_platform_stats() and the
-// block/unblock RPCs all check has_role(auth.uid(), 'admin') themselves,
-// so this page is safe even though it isn't hidden behind client-side
-// routing tricks.
 function AdminPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const qc = useQueryClient();
   const [targetId, setTargetId] = useState("");
   const [reason, setReason] = useState("");
 
   const statsQuery = useQuery({
     queryKey: ["admin-stats"],
-    enabled: !!user,
+    enabled: !!session,
     retry: false,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("admin_platform_stats");
@@ -78,7 +70,7 @@ function AdminPage() {
   });
 
   if (authLoading) return null;
-  if (!user) return <div className="p-6 text-sm text-muted-foreground">Sign in first.</div>;
+  if (!session) return <div className="p-6 text-sm text-muted-foreground">Sign in first.</div>;
   if (statsQuery.isError) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
