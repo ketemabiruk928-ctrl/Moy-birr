@@ -24,21 +24,6 @@ import {
 } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/profile")({
-  head: () => ({
-    meta: [
-      { title: "My Profile & Bookings — Moybirr" },
-      {
-        name: "description",
-        content:
-          "Manage your Moybirr profile, switch between Amharic and English, review your hotel bookings and rate the staff who served you.",
-      },
-      { property: "og:title", content: "Profile & Bookings — Moybirr" },
-      {
-        property: "og:description",
-        content: "Your bookings, staff ratings and account settings in one place.",
-      },
-    ],
-  }),
   component: () => (
     <RequireAuth>
       <AppShell>
@@ -67,19 +52,6 @@ function ProfilePage() {
       return data;
     },
     enabled: !!user,
-  });
-
-  const staffProfile = useQuery({
-    queryKey: ["my-staff-profile", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("staff_profiles")
-        .select("*")
-        .eq("user_id", user!.id)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!user && role === "staff",
   });
 
   const bookings = useQuery({
@@ -125,32 +97,16 @@ function ProfilePage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const updateLocation = useMutation({
-    mutationFn: async (position: { lat: number; lng: number; city: string; position_name: string }) => {
-      const { error } = await supabase
-        .from("staff_profiles")
-        .update({
-          lat: position.lat,
-          lng: position.lng,
-          city: position.city,
-          position: position.position_name,
-        })
-        .eq("user_id", user!.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Staff profile updated");
-      void qc.invalidateQueries({ queryKey: ["my-staff-profile"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const [city, setCity] = useState("");
-  const [position, setPosition] = useState("");
-
   return (
     <>
-      <AppHeader title={t("profile")} subtitle={profile?.phone ?? ""} />
+      <AppHeader
+        title={t("profile")}
+        subtitle={
+          profile?.moybirr_id
+            ? `${profile.moybirr_id}${profile?.phone ? " · " + profile.phone : ""}`
+            : (profile?.phone ?? "")
+        }
+      />
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
         <Card className="shadow-card space-y-4 p-5">
@@ -201,76 +157,10 @@ function ProfilePage() {
             </div>
           </div>
 
-
           <Button className="w-full" disabled={saveProfile.isPending} onClick={() => saveProfile.mutate()}>
             Save profile
           </Button>
         </Card>
-
-        {role === "staff" ? (
-          <Card className="shadow-card space-y-3 p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold">My staff profile</p>
-              <span className="flex items-center gap-1 text-sm font-bold">
-                <Star className="size-4 fill-primary text-primary" />
-                {Number(staffProfile.data?.rating ?? 0).toFixed(1)}
-              </span>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="pos">Position</Label>
-              <Input
-                id="pos"
-                placeholder={staffProfile.data?.position ?? "waiter"}
-                value={position}
-                onChange={(e) => setPosition(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="city">City</Label>
-              <Input
-                id="city"
-                placeholder={staffProfile.data?.city ?? "Addis Ababa"}
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-              />
-            </div>
-            <Button
-              variant="secondary"
-              className="w-full"
-              onClick={() => {
-                navigator.geolocation.getCurrentPosition(
-                  (p) =>
-                    updateLocation.mutate({
-                      lat: p.coords.latitude,
-                      lng: p.coords.longitude,
-                      city: city || staffProfile.data?.city || "Addis Ababa",
-                      position_name: position || staffProfile.data?.position || "waiter",
-                    }),
-                  () => toast.error("Could not read your GPS location"),
-                );
-              }}
-            >
-              <Navigation className="mr-2 size-4" />
-              Update with my GPS location
-            </Button>
-            {staffProfile.data?.lat ? (
-              <p className="text-xs text-muted-foreground">
-                <MapPin className="mr-1 inline size-3" />
-                {Number(staffProfile.data.lat).toFixed(3)},{" "}
-                {Number(staffProfile.data.lng).toFixed(3)} · {staffProfile.data.rating_count} ratings
-              </p>
-            ) : null}
-          </Card>
-        ) : null}
-
-        {role === "staff" && staffProfile.data ? (
-          <TipQr
-            title="My tip QR code"
-            description="Show this to guests — they scan it, pay the bill and 100% of the tip lands in your wallet."
-            hotelId={staffProfile.data.hotel_id}
-            staffId={staffProfile.data.id}
-          />
-        ) : null}
 
         <div>
           <h2 className="mb-2 px-1 text-sm font-semibold">{t("my_bookings")}</h2>
@@ -451,4 +341,4 @@ function Stars({ value, onChange }: { value: number; onChange: (v: number) => vo
       ))}
     </div>
   );
-}
+}                  
