@@ -9,6 +9,7 @@ import { AppHeader, AppShell, RequireAuth } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { TipQr } from "@/components/TipQr";
 
 export const Route = createFileRoute("/staff")({
   head: () => ({
@@ -48,7 +49,7 @@ function StaffPage() {
       const { data, error } = await supabase
         .from("staff_profiles")
         .select(
-          "id,position,city,rating,rating_count,lat,lng, profiles:user_id(full_name,phone), hotels:hotel_id(name)",
+          "id,position,city,rating,rating_count,lat,lng,hotel_id, profiles:user_id(full_name,phone,moybirr_id), hotels:hotel_id(name)",
         )
         .order("rating", { ascending: false });
       if (error) throw error;
@@ -125,34 +126,45 @@ function StaffPage() {
           </Card>
         ) : (
           list.map((s) => {
-            const p = s.profiles as { full_name?: string } | null;
+            const p = s.profiles as { full_name?: string; moybirr_id?: string } | null;
             const h = s.hotels as { name?: string } | null;
             const name = p?.full_name || "Staff member";
             return (
-              <Card key={s.id} className="shadow-card flex items-center gap-3 p-4">
-                <Avatar className="size-11">
-                  <AvatarFallback className="bg-accent text-accent-foreground">
-                    {name.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{name}</p>
-                  <p className="truncate text-xs capitalize text-muted-foreground">
-                    {s.position} {h?.name ? `· ${h.name}` : ""}
-                  </p>
-                  <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                    <MapPin className="size-3" />
-                    {s.city}
-                    {s.dist != null ? ` · ${formatDistance(s.dist)} away` : ""}
-                  </p>
+              <Card key={s.id} className="shadow-card space-y-3 p-4">
+                <div className="flex items-center gap-3">
+                  <Avatar className="size-11">
+                    <AvatarFallback className="bg-accent text-accent-foreground">
+                      {name.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{name}</p>
+                    {p?.moybirr_id ? (
+                      <p className="text-[11px] font-bold text-primary">{p.moybirr_id}</p>
+                    ) : null}
+                    <p className="truncate text-xs capitalize text-muted-foreground">
+                      {s.position} {h?.name ? `· ${h.name}` : ""}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin className="size-3" />
+                      {s.city}
+                      {s.dist != null ? ` · ${formatDistance(s.dist)} away` : ""}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="flex items-center justify-end gap-1 text-sm font-bold">
+                      <Star className="size-4 fill-primary text-primary" />
+                      {Number(s.rating).toFixed(1)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">{s.rating_count} ratings</p>
+                  </div>
                 </div>
-                <div className="shrink-0 text-right">
-                  <p className="flex items-center justify-end gap-1 text-sm font-bold">
-                    <Star className="size-4 fill-primary text-primary" />
-                    {Number(s.rating).toFixed(1)}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">{s.rating_count} ratings</p>
-                </div>
+                <TipQr
+                  title={`Tip ${name}`}
+                  description={`Send a tip directly to ${name}'s Moybirr wallet`}
+                  hotelId={s.hotel_id ?? undefined}
+                  staffId={s.id}
+                />
               </Card>
             );
           })
@@ -161,3 +173,4 @@ function StaffPage() {
     </>
   );
 }
+          
