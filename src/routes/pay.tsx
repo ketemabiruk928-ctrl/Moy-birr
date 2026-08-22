@@ -80,7 +80,7 @@ function PayPage() {
     queryFn: async () => {
       let q = supabase
         .from("staff_profiles")
-        .select("id,user_id,position,rating,rating_count,hotel_id, profiles:user_id(full_name)");
+        .select("id,user_id,position,rating,rating_count,hotel_id, profiles:user_id(full_name,moybirr_id)");
       if (hotelId) q = q.eq("hotel_id", hotelId);
       const { data, error } = await q.limit(30);
       if (error) throw error;
@@ -188,7 +188,6 @@ function PayPage() {
     });
   })();
 
-
   return (
     <>
       <AppHeader title={t("scan_pay")} subtitle={`Balance: ${formatETB(wallet.data?.balance)}`} />
@@ -294,7 +293,6 @@ function PayPage() {
               </div>
             ) : null}
           </div>
-
         </Card>
 
         <Card className="shadow-card p-5">
@@ -344,6 +342,32 @@ function PayPage() {
           </div>
 
           <div className="mt-5 space-y-2">
+            <Label htmlFor="staff-id-input">Staff Moybirr ID</Label>
+            <Input
+              id="staff-id-input"
+              placeholder="e.g. MS-000001"
+              onChange={async (e) => {
+                const val = e.target.value.toUpperCase().trim();
+                if (!val) { setStaffId(null); setStaffName(""); return; }
+                const { data } = await supabase
+                  .from("staff_profiles")
+                  .select("id, position, profiles:user_id(full_name, moybirr_id)")
+                  .eq("hotel_id", hotelId ?? "")
+                  .limit(50);
+                const match = (data ?? []).find((s) => {
+                  const p = s.profiles as { moybirr_id?: string; full_name?: string } | null;
+                  return p?.moybirr_id === val;
+                });
+                if (match) {
+                  const p = match.profiles as { full_name?: string } | null;
+                  setStaffId(match.id);
+                  setStaffName(p?.full_name || "Staff member");
+                }
+              }}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Enter the waiter's Moybirr ID to send the tip directly to their wallet.
+            </p>
             <Label htmlFor="staff-name">{t("staff_name")}</Label>
             <Input
               id="staff-name"
@@ -360,7 +384,7 @@ function PayPage() {
                 </p>
               ) : (
                 staffResults.map((s) => {
-                  const p = s.profiles as { full_name?: string } | null;
+                  const p = s.profiles as { full_name?: string; moybirr_id?: string } | null;
                   return (
                     <button
                       key={s.id}
@@ -374,6 +398,9 @@ function PayPage() {
                     >
                       <span>
                         <span className="text-sm font-medium">{p?.full_name || "Staff member"}</span>
+                        {p?.moybirr_id ? (
+                          <span className="ml-2 text-[11px] font-bold text-primary">{p.moybirr_id}</span>
+                        ) : null}
                         <span className="block text-xs text-muted-foreground capitalize">
                           {s.position}
                         </span>
@@ -419,7 +446,6 @@ function PayPage() {
             ) : null}
           </div>
 
-
           <div className="mt-5 rounded-xl bg-muted p-4">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">{t("service_bill")}</span>
@@ -456,3 +482,9 @@ function PayPage() {
     </>
   );
 }
+    
+
+  
+              
+
+          
