@@ -38,7 +38,10 @@ export default async function handler(req, res) {
   );
   const cfgData = await cfgRes.json();
   const cfg = Array.isArray(cfgData) ? cfgData[0] : null;
-  if (!cfg?.is_live) return res.status(400).json({ error: "Deposits aren't available in your country yet." });
+  // Only block if explicitly set to false — if no config found, allow through
+  if (cfg && cfg.is_live === false) {
+    return res.status(400).json({ error: "Deposits aren't available in your country yet." });
+  }
 
   const { amount, currency = "ETB" } = req.body ?? {};
   const numAmount = Number(amount);
