@@ -13,25 +13,22 @@ export default async function handler(req, res) {
   if (!authHeader) return res.status(401).json({ error: "Not authenticated" });
   const token = authHeader.toString().replace(/^Bearer\s+/i, "");
 
-  // Use anon key as apikey when verifying user token
   const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
     headers: {
       Authorization: `Bearer ${token}`,
       apikey: SUPABASE_ANON_KEY,
     },
   });
-  if (!userRes.ok) {
-    const err = await userRes.text();
-    console.error("Auth check failed:", err);
-    return res.status(401).json({ error: "Not authenticated" });
-  }
+  if (!userRes.ok) return res.status(401).json({ error: "Not authenticated" });
   const user = await userRes.json();
+  if (!user?.id) return res.status(401).json({ error: "Not authenticated" });
 
   const profileRes = await fetch(
     `${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=is_blocked,country_code&limit=1`,
     { headers: { Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`, apikey: SUPABASE_SERVICE_KEY } }
   );
-  const [profile] = await profileRes.json();
+  const profileData = await profileRes.json();
+  const profile = Array.isArray(profileData) ? profileData[0] : null;
   if (profile?.is_blocked) return res.status(403).json({ error: "This account has been blocked." });
 
   const countryCode = profile?.country_code ?? "ET";
@@ -39,7 +36,8 @@ export default async function handler(req, res) {
     `${SUPABASE_URL}/rest/v1/payment_provider_config?country_code=eq.${countryCode}&select=is_live&limit=1`,
     { headers: { Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`, apikey: SUPABASE_SERVICE_KEY } }
   );
-  const [cfg] = await cfgRes.json();
+  const cfgData = await cfgRes.json();
+  const cfg = Array.isArray(cfgData) ? cfgData[0] : null;
   if (!cfg?.is_live) return res.status(400).json({ error: "Deposits aren't available in your country yet." });
 
   const { amount, currency = "ETB" } = req.body ?? {};
@@ -59,7 +57,8 @@ export default async function handler(req, res) {
     },
     body: JSON.stringify({ user_id: user.id, purpose: "deposit", amount: numAmount, tx_ref: txRef, provider: "chapa" }),
   });
-  const [order] = await orderRes.json();
+  const orderData = await orderRes.json();
+  const order = Array.isArray(orderData) ? orderData[0] : null;
   if (!order?.id) return res.status(500).json({ error: "Could not create payment order" });
 
   const origin = `https://${req.headers.host}`;
