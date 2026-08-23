@@ -1,6 +1,7 @@
 const CHAPA_BASE_URL = "https://api.chapa.co/v1";
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const CHAPA_SECRET_KEY = process.env.CHAPA_SECRET_KEY;
 
 export default async function handler(req, res) {
@@ -12,13 +13,18 @@ export default async function handler(req, res) {
   if (!authHeader) return res.status(401).json({ error: "Not authenticated" });
   const token = authHeader.toString().replace(/^Bearer\s+/i, "");
 
+  // Use anon key as apikey when verifying user token
   const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
     headers: {
       Authorization: `Bearer ${token}`,
-      apikey: SUPABASE_SERVICE_KEY,
+      apikey: SUPABASE_ANON_KEY,
     },
   });
-  if (!userRes.ok) return res.status(401).json({ error: "Not authenticated" });
+  if (!userRes.ok) {
+    const err = await userRes.text();
+    console.error("Auth check failed:", err);
+    return res.status(401).json({ error: "Not authenticated" });
+  }
   const user = await userRes.json();
 
   const profileRes = await fetch(
@@ -81,4 +87,3 @@ export default async function handler(req, res) {
 
   return res.status(200).json({ checkoutUrl: chapaData.data.checkout_url, orderId: order.id });
 }
-    
