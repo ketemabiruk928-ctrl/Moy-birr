@@ -8,9 +8,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const authHeader = req.headers["authorization"];
+  const authHeader = req.headers["authorization"] || req.headers["Authorization"];
   if (!authHeader) return res.status(401).json({ error: "Not authenticated" });
-  const token = authHeader.replace(/^Bearer\s+/i, "");
+  const token = authHeader.toString().replace(/^Bearer\s+/i, "");
 
   const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
     headers: {
@@ -81,3 +81,4 @@ export default async function handler(req, res) {
 
   return res.status(200).json({ checkoutUrl: chapaData.data.checkout_url, orderId: order.id });
 }
+    
