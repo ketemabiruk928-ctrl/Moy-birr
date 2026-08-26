@@ -20,6 +20,7 @@ type Hotel = {
   description: string | null;
   photo_url: string | null;
   price_from: number;
+  trade_license_url?: string | null;
 };
 
 export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
@@ -30,6 +31,7 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
   const [description, setDescription] = useState(hotel?.description ?? "");
   const [photoUrl, setPhotoUrl] = useState(hotel?.photo_url ?? "");
   const [priceFrom, setPriceFrom] = useState(hotel ? String(hotel.price_from) : "");
+  const [tradeLicenseUrl, setTradeLicenseUrl] = useState(hotel?.trade_license_url ?? "");
 
   useEffect(() => {
     if (!hotel) return;
@@ -38,11 +40,12 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
     setDescription(hotel.description ?? "");
     setPhotoUrl(hotel.photo_url ?? "");
     setPriceFrom(String(hotel.price_from));
+    setTradeLicenseUrl(hotel.trade_license_url ?? "");
   }, [hotel]);
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc("save_my_hotel", {
+      const { data: hotelId, error } = await supabase.rpc("save_my_hotel", {
         _name: name,
         _city: city,
         _description: description,
@@ -50,6 +53,15 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
         _price_from: priceFrom ? Number(priceFrom) : 0,
       });
       if (error) throw error;
+
+      // Optional trade licence (not mandatory)
+      if (hotelId) {
+        const { error: e2 } = await supabase
+          .from("hotels")
+          .update({ trade_license_url: tradeLicenseUrl || null })
+          .eq("id", hotelId);
+        if (e2) throw e2;
+      }
     },
     onSuccess: () => {
       toast.success(hotel ? "Property updated" : "Property registered");
@@ -66,7 +78,12 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
       </p>
       <div className="space-y-1.5">
         <Label htmlFor="hn">Hotel name</Label>
-        <Input id="hn" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sheba Grand Hotel" />
+        <Input
+          id="hn"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Sheba Grand Hotel"
+        />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
@@ -87,7 +104,11 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
       <div className="space-y-1.5">
         <Label htmlFor="hi">Cover photo</Label>
         {photoUrl ? (
-          <MediaImg src={photoUrl} alt="Cover photo" className="h-36 w-full rounded-xl object-cover" />
+          <MediaImg
+            src={photoUrl}
+            alt="Cover photo"
+            className="h-36 w-full rounded-xl object-cover"
+          />
         ) : null}
         {user ? (
           <UploadButton userId={user.id} label="Upload cover photo" onUploaded={setPhotoUrl} />
@@ -108,6 +129,41 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
           placeholder="Rooftop restaurant, spa, free airport shuttle…"
         />
       </div>
+
+      {/* Optional Trade Licence */}
+      <div className="space-y-1.5">
+        <Label htmlFor="tl">
+          Trade licence <span className="font-normal text-muted-foreground">(optional)</span>
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          Attach your trade licence if you want. This is not mandatory.
+        </p>
+        {tradeLicenseUrl ? (
+          <a
+            href={tradeLicenseUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="block truncate text-xs text-primary underline"
+          >
+            View current licence
+          </a>
+        ) : null}
+        {user ? (
+          <UploadButton
+            userId={user.id}
+            accept="image/*,application/pdf"
+            label="Upload trade licence"
+            onUploaded={setTradeLicenseUrl}
+          />
+        ) : null}
+        <Input
+          id="tl"
+          value={tradeLicenseUrl}
+          onChange={(e) => setTradeLicenseUrl(e.target.value)}
+          placeholder="…or paste a document / image URL"
+        />
+      </div>
+
       <Button className="w-full" disabled={!name || save.isPending} onClick={() => save.mutate()}>
         {hotel ? "Save changes" : "Register property"}
       </Button>
@@ -122,7 +178,7 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
   const [capacity, setCapacity] = useState("2");
 
   const rooms = useQuery({
-    queryKey: ["owner-rooms", hotelId],
+    queryKey: ["rooms", hotelId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("rooms")
@@ -149,7 +205,6 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
       setRoomType("");
       setPrice("");
       setCapacity("2");
-      void qc.invalidateQueries({ queryKey: ["owner-rooms", hotelId] });
       void qc.invalidateQueries({ queryKey: ["rooms", hotelId] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -161,33 +216,29 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Room removed");
-      void qc.invalidateQueries({ queryKey: ["owner-rooms", hotelId] });
+      void qc.invalidateQueries({ queryKey: ["rooms", hotelId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const totalCapacity = (rooms.data ?? []).reduce((s, r) => s + r.capacity, 0);
+  const totalCapacity = (rooms.data ?? []).reduce((s, r) => s + Number(r.capacity), 0);
 
   return (
     <div className="space-y-3">
       <Card className="shadow-card space-y-3 p-4">
-        <p className="flex items-center gap-1.5 text-sm font-semibold">
-          <BedDouble className="size-4 text-primary" />
-          Add room &amp; price
-        </p>
+        <p className="text-sm font-semibold">Add a room type</p>
         <div className="space-y-1.5">
           <Label htmlFor="rt">Room type</Label>
           <Input
             id="rt"
             value={roomType}
             onChange={(e) => setRoomType(e.target.value)}
-            placeholder="Deluxe double"
+            placeholder="Deluxe Double"
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="rp">Price / night (ETB)</Label>
+            <Label htmlFor="rp">Price (ETB)</Label>
             <Input
               id="rp"
               type="number"
@@ -197,7 +248,7 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="rc">Capacity (guests)</Label>
+            <Label htmlFor="rc">Capacity</Label>
             <Input
               id="rc"
               type="number"
@@ -219,7 +270,7 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
 
       {(rooms.data ?? []).length === 0 ? (
         <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-          No rooms listed yet. Add your room types and prices so guests can book.
+          No rooms yet. Add your first room type above.
         </Card>
       ) : (
         <>
@@ -396,4 +447,5 @@ export function ShowcaseManager({ hotelId }: { hotelId: string }) {
       )}
     </div>
   );
-}
+}           
+        
