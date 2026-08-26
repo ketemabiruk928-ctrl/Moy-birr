@@ -160,7 +160,7 @@ function ProfilePage() {
         title={t("profile")}
         subtitle={
           profile?.moybirr_id
-            ? `\( {profile.moybirr_id} \){profile?.phone ? " · " + profile.phone : ""}`
+            ? profile.moybirr_id + (profile?.phone ? " · " + profile.phone : "")
             : (profile?.phone ?? "")
         }
       />
