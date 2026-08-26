@@ -54,6 +54,19 @@ function ProfilePage() {
     enabled: !!user,
   });
 
+  const staffProfile = useQuery({
+    queryKey: ["my-staff-profile", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("staff_profiles")
+        .select("*")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user && role === "staff",
+  });
+
   const bookings = useQuery({
     queryKey: ["bookings", user?.id],
     queryFn: async () => {
@@ -97,13 +110,57 @@ function ProfilePage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const updateLocation = useMutation({
+    mutationFn: async (payload: {
+      lat: number | null;
+      lng: number | null;
+      position_name: string;
+      region: string;
+      city: string;
+      subcity: string;
+      wereda: string;
+      house_number: string;
+      hotel_code: string;
+    }) => {
+      const { error } = await supabase
+        .from("staff_profiles")
+        .update({
+          lat: payload.lat,
+          lng: payload.lng,
+          position: payload.position_name,
+          region: payload.region || null,
+          city: payload.city,
+          subcity: payload.subcity || null,
+          wereda: payload.wereda || null,
+          house_number: payload.house_number || null,
+          hotel_code: payload.hotel_code || null,
+        })
+        .eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Staff profile updated");
+      void qc.invalidateQueries({ queryKey: ["my-staff-profile"] });
+      void qc.invalidateQueries({ queryKey: ["staff-directory"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const [position, setPosition] = useState("");
+  const [region, setRegion] = useState("");
+  const [city, setCity] = useState("");
+  const [subcity, setSubcity] = useState("");
+  const [wereda, setWereda] = useState("");
+  const [houseNumber, setHouseNumber] = useState("");
+  const [hotelCode, setHotelCode] = useState("");
+
   return (
     <>
       <AppHeader
         title={t("profile")}
         subtitle={
           profile?.moybirr_id
-            ? `${profile.moybirr_id}${profile?.phone ? " · " + profile.phone : ""}`
+            ? `\( {profile.moybirr_id} \){profile?.phone ? " · " + profile.phone : ""}`
             : (profile?.phone ?? "")
         }
       />
@@ -161,6 +218,153 @@ function ProfilePage() {
             Save profile
           </Button>
         </Card>
+
+        {role === "staff" ? (
+          <Card className="shadow-card space-y-3 p-5">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold">My staff profile</p>
+              <span className="flex items-center gap-1 text-sm font-bold">
+                <Star className="size-4 fill-primary text-primary" />
+                {Number(staffProfile.data?.rating ?? 0).toFixed(1)}
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="pos">Position</Label>
+              <Input
+                id="pos"
+                placeholder={staffProfile.data?.position ?? "waiter"}
+                value={position}
+                onChange={(e) => setPosition(e.target.value)}
+              />
+            </div>
+
+            <p className="pt-1 text-xs font-medium text-muted-foreground">
+              Current working place
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="region">Region</Label>
+                <Input
+                  id="region"
+                  placeholder={staffProfile.data?.region ?? "Addis Ababa"}
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="city">City</Label>
+                <Input
+                  id="city"
+                  placeholder={staffProfile.data?.city ?? "Addis Ababa"}
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="subcity">Subcity</Label>
+                <Input
+                  id="subcity"
+                  placeholder={staffProfile.data?.subcity ?? "Bole"}
+                  value={subcity}
+                  onChange={(e) => setSubcity(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="wereda">Wereda</Label>
+                <Input
+                  id="wereda"
+                  placeholder={staffProfile.data?.wereda ?? "03"}
+                  value={wereda}
+                  onChange={(e) => setWereda(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="house">House number</Label>
+                <Input
+                  id="house"
+                  placeholder={staffProfile.data?.house_number ?? "Optional"}
+                  value={houseNumber}
+                  onChange={(e) => setHouseNumber(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="hcode">Hotel code (Moybirr)</Label>
+                <Input
+                  id="hcode"
+                  placeholder={staffProfile.data?.hotel_code ?? "e.g. MO-000123"}
+                  value={hotelCode}
+                  onChange={(e) => setHotelCode(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <Button
+              className="w-full"
+              disabled={updateLocation.isPending}
+              onClick={() => {
+                const payload = {
+                  lat: staffProfile.data?.lat ?? null,
+                  lng: staffProfile.data?.lng ?? null,
+                  position_name: position || staffProfile.data?.position || "waiter",
+                  region: region || staffProfile.data?.region || "",
+                  city: city || staffProfile.data?.city || "Addis Ababa",
+                  subcity: subcity || staffProfile.data?.subcity || "",
+                  wereda: wereda || staffProfile.data?.wereda || "",
+                  house_number: houseNumber || staffProfile.data?.house_number || "",
+                  hotel_code: hotelCode || staffProfile.data?.hotel_code || "",
+                };
+                updateLocation.mutate(payload);
+              }}
+            >
+              Save working place
+            </Button>
+
+            <Button
+              variant="secondary"
+              className="w-full"
+              disabled={updateLocation.isPending}
+              onClick={() => {
+                navigator.geolocation.getCurrentPosition(
+                  (p) =>
+                    updateLocation.mutate({
+                      lat: p.coords.latitude,
+                      lng: p.coords.longitude,
+                      position_name: position || staffProfile.data?.position || "waiter",
+                      region: region || staffProfile.data?.region || "",
+                      city: city || staffProfile.data?.city || "Addis Ababa",
+                      subcity: subcity || staffProfile.data?.subcity || "",
+                      wereda: wereda || staffProfile.data?.wereda || "",
+                      house_number: houseNumber || staffProfile.data?.house_number || "",
+                      hotel_code: hotelCode || staffProfile.data?.hotel_code || "",
+                    }),
+                  () => toast.error("Could not read your GPS location"),
+                );
+              }}
+            >
+              <Navigation className="mr-2 size-4" />
+              Save + update with my GPS location
+            </Button>
+
+            {staffProfile.data?.lat ? (
+              <p className="text-xs text-muted-foreground">
+                <MapPin className="mr-1 inline size-3" />
+                {Number(staffProfile.data.lat).toFixed(3)},{" "}
+                {Number(staffProfile.data.lng).toFixed(3)} · {staffProfile.data.rating_count} ratings
+              </p>
+            ) : null}
+          </Card>
+        ) : null}
+
+        {role === "staff" && staffProfile.data ? (
+          <TipQr
+            title="My tip QR code"
+            description="Show this to guests — they scan it, pay the bill and 100% of the tip lands in your wallet."
+            hotelId={staffProfile.data.hotel_id}
+            staffId={staffProfile.data.id}
+          />
+        ) : null}
 
         <div>
           <h2 className="mb-2 px-1 text-sm font-semibold">{t("my_bookings")}</h2>
@@ -341,4 +545,4 @@ function Stars({ value, onChange }: { value: number; onChange: (v: number) => vo
       ))}
     </div>
   );
-}                  
+}             
