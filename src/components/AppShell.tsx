@@ -10,9 +10,16 @@ export function AppHeader({ title, subtitle }: { title: string; subtitle?: strin
   return (
     <header className="bg-gradient-primary px-5 pt-6 pb-8 text-primary-foreground">
       <div className="mx-auto flex w-full max-w-lg items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-          {subtitle ? <p className="mt-1 text-sm opacity-90">{subtitle}</p> : null}
+        <div className="flex items-start gap-3">
+          <img
+            src="/logo.png"
+            alt="Moybirr"
+            className="mt-0.5 h-10 w-auto rounded-lg bg-white/95 object-contain p-1"
+          />
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+            {subtitle ? <p className="mt-1 text-sm opacity-90">{subtitle}</p> : null}
+          </div>
         </div>
         <select
           value={lang}
