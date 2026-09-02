@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { Home, BedDouble, QrCode, Briefcase, User, LayoutDashboard, Users } from "lucide-react";
+import { Home, BedDouble, QrCode, Briefcase, User, LayoutDashboard, Users, Clapperboard } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
 import { languages, useLang } from "@/lib/i18n";
@@ -47,6 +47,7 @@ export function BottomTabs() {
   const tabs = [
     { to: "/", icon: Home, label: t("home") },
     { to: "/hotels", icon: BedDouble, label: t("hotels") },
+    { to: "/warka", icon: Clapperboard, label: t("warka") },
     { to: "/pay", icon: QrCode, label: t("pay") },
     role === "owner"
       ? { to: "/owner", icon: LayoutDashboard, label: t("dashboard") }
