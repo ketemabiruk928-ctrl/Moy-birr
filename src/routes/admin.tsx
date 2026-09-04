@@ -19,32 +19,59 @@ function AdminPage() {
   const qc = useQueryClient();
 
   const [email, setEmail] = useState(ADMIN_EMAIL);
-  const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [targetId, setTargetId] = useState("");
   const [reason, setReason] = useState("");
-  const [loginBusy, setLoginBusy] = useState(false);
 
   const isAllowedAdmin =
     !!user?.email && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
-  const adminLogin = async () => {
-    if (!email || !password) {
-      toast.error("Enter email and password");
+  const sendOtp = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail !== ADMIN_EMAIL.toLowerCase()) {
+      toast.error("Only the authorized admin email can request OTP");
       return;
     }
-    setLoginBusy(true);
+    setBusy(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+      const { error } = await supabase.auth.signInWithOtp({
+        email: cleanEmail,
+        options: {
+          shouldCreateUser: false,
+        },
       });
       if (error) throw error;
-      await refresh();
-      toast.success("Admin logged in");
+      setOtpSent(true);
+      toast.success("OTP sent to your email");
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setLoginBusy(false);
+      setBusy(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!otp.trim()) {
+      toast.error("Enter the OTP code");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: cleanEmail,
+        token: otp.trim(),
+        type: "email",
+      });
+      if (error) throw error;
+      await refresh();
+      toast.success("Admin verified");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -124,14 +151,13 @@ function AdminPage() {
     );
   }
 
-  // Separate admin login screen
   if (!isAllowedAdmin) {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-4 px-4">
         <div>
           <h1 className="text-2xl font-bold">Moybirr Admin</h1>
           <p className="text-sm text-muted-foreground">
-            Private control panel. Authorized admin only.
+            Enter admin email. We will send an OTP code to your email.
           </p>
         </div>
 
@@ -142,24 +168,36 @@ function AdminPage() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="ketemebiruk928@gmail.com"
           />
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="password">Password</Label>
-          <Input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Admin password"
-          />
-        </div>
-
-        <Button disabled={loginBusy} onClick={() => void adminLogin()}>
-          {loginBusy ? "Signing in…" : "Enter admin panel"}
-        </Button>
+        {!otpSent ? (
+          <Button disabled={busy} onClick={() => void sendOtp()}>
+            {busy ? "Sending…" : "Send OTP to email"}
+          </Button>
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="otp">OTP code</Label>
+              <Input
+                id="otp"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                placeholder="6-digit code"
+              />
+            </div>
+            <Button disabled={busy} onClick={() => void verifyOtp()}>
+              {busy ? "Verifying…" : "Verify OTP & Enter"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => void sendOtp()}
+            >
+              Resend OTP
+            </Button>
+          </>
+        )}
       </div>
     );
   }
@@ -180,7 +218,7 @@ function AdminPage() {
 
       {statsQuery.isError ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
-          Could not load stats. Check admin role in Supabase.
+          Could not load stats. Check admin role.
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
@@ -198,8 +236,6 @@ function AdminPage() {
 
       <div className="space-y-3 rounded-xl border border-border p-4">
         <h2 className="text-sm font-semibold">Block / Unblock member</h2>
-        <p className="text-xs text-muted-foreground">Use Moybirr ID (example MG-000042)</p>
-
         <div className="space-y-1.5">
           <Label htmlFor="tid">Moybirr ID</Label>
           <Input
@@ -209,17 +245,14 @@ function AdminPage() {
             placeholder="MG-000042"
           />
         </div>
-
         <div className="space-y-1.5">
           <Label htmlFor="reason">Reason</Label>
           <Input
             id="reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="fraud / abuse"
           />
         </div>
-
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant="destructive"
@@ -252,10 +285,7 @@ function AdminPage() {
             Refresh
           </Button>
         </div>
-
-        {movementsQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (movementsQuery.data ?? []).length === 0 ? (
+        {(movementsQuery.data ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">No transactions yet.</p>
         ) : (
           <div className="space-y-2">
@@ -285,4 +315,4 @@ function Stat({ label, value }: { label: string; value: number | string | undefi
       <p className="mt-1 text-lg font-bold">{value ?? "—"}</p>
     </div>
   );
-}                
+}         
