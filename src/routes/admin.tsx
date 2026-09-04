@@ -1,4 +1,4 @@
-    import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,15 +12,20 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
+const ADMIN_EMAIL = "ketemebiruk928@gmail.com";
+
 function AdminPage() {
-  const { user, session, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const qc = useQueryClient();
   const [targetId, setTargetId] = useState("");
   const [reason, setReason] = useState("");
 
+  const isAllowedAdmin =
+    !!user?.email && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
   const statsQuery = useQuery({
     queryKey: ["admin-stats"],
-    enabled: !!session,
+    enabled: !!user && isAllowedAdmin,
     retry: false,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("admin_platform_stats");
@@ -36,6 +41,21 @@ function AdminPage() {
         pending_deposits: number;
         pending_payouts: number;
       };
+    },
+  });
+
+  const movementsQuery = useQuery({
+    queryKey: ["admin-movements"],
+    enabled: !!user && isAllowedAdmin,
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("id, created_at, type, amount, note, sender_id, receiver_id")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
@@ -58,7 +78,9 @@ function AdminPage() {
 
   const unblockMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc("admin_unblock_user", { _target_moybirr_id: targetId });
+      const { error } = await supabase.rpc("admin_unblock_user", {
+        _target_moybirr_id: targetId,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -69,65 +91,156 @@ function AdminPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  if (authLoading) return null;
-  if (!session) return <div className="p-6 text-sm text-muted-foreground">Sign in first.</div>;
-  if (statsQuery.isError) {
+  if (authLoading) {
     return (
-      <div className="p-6 text-sm text-muted-foreground">
-        You don't have access to this page.
+      <div className="flex min-h-screen items-center justify-center p-6">
+        <p>Loading admin…</p>
       </div>
     );
   }
 
-  const s = statsQuery.data;
+  if (!user || !isAllowedAdmin) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+        <h1 className="text-xl font-bold">Access denied</h1>
+        <p className="text-sm text-muted-foreground">
+          Only the authorized admin can open this control panel.
+        </p>
+      </div>
+    );
+  }
+
+  const stats = statsQuery.data;
 
   return (
-    <div className="mx-auto max-w-2xl p-6 space-y-6">
-      <h1 className="text-xl font-bold">Moybirr admin</h1>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Stat label="Guests" value={s?.guests} />
-        <Stat label="Staff" value={s?.staff} />
-        <Stat label="Owners" value={s?.owners} />
-        <Stat label="Hotels" value={s?.hotels} />
-        <Stat label="Blocked users" value={s?.blocked_users} />
-        <Stat label="Pending deposits" value={s?.pending_deposits} />
-        <Stat label="Pending payouts" value={s?.pending_payouts} />
-        <Stat label="Total volume (ETB)" value={s?.total_transaction_volume} />
-        <Stat label="Platform revenue (ETB)" value={s?.platform_revenue} />
+    <div className="mx-auto min-h-screen w-full max-w-lg space-y-5 bg-background px-4 py-6">
+      <div>
+        <h1 className="text-xl font-bold">Moybirr Admin</h1>
+        <p className="text-xs text-muted-foreground">{user.email}</p>
       </div>
 
-      <div className="rounded-xl border p-4 space-y-3">
-        <h2 className="text-sm font-semibold">Block / unblock a user</h2>
+      {statsQuery.isError ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+          Could not load admin stats. Make sure this account has admin role.
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <Stat label="Guests" value={stats?.guests} />
+          <Stat label="Staff" value={stats?.staff} />
+          <Stat label="Owners" value={stats?.owners} />
+          <Stat label="Hotels" value={stats?.hotels} />
+          <Stat label="Blocked users" value={stats?.blocked_users} />
+          <Stat label="Pending deposits" value={stats?.pending_deposits} />
+          <Stat label="Pending payouts" value={stats?.pending_payouts} />
+          <Stat label="Total volume (ETB)" value={stats?.total_transaction_volume} />
+          <Stat label="Platform revenue (ETB)" value={stats?.platform_revenue} />
+        </div>
+      )}
+
+      <div className="space-y-3 rounded-xl border border-border p-4">
+        <h2 className="text-sm font-semibold">Block / Unblock member</h2>
         <p className="text-xs text-muted-foreground">
-          Look them up by their Moybirr ID (e.g. MG-000042), not name or phone — it's unambiguous and it's what shows on their receipts.
+          Use Moybirr ID (example: MG-000042)
         </p>
+
         <div className="space-y-1.5">
           <Label htmlFor="tid">Moybirr ID</Label>
-          <Input id="tid" value={targetId} onChange={(e) => setTargetId(e.target.value.toUpperCase())} placeholder="MG-000042" />
+          <Input
+            id="tid"
+            value={targetId}
+            onChange={(e) => setTargetId(e.target.value.toUpperCase())}
+            placeholder="MG-000042"
+          />
         </div>
+
         <div className="space-y-1.5">
-          <Label htmlFor="reason">Reason (for the audit log)</Label>
-          <Input id="reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. repeated chargebacks" />
+          <Label htmlFor="reason">Reason (for block)</Label>
+          <Input
+            id="reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. fraud / abuse"
+          />
         </div>
-        <div className="flex gap-2">
-          <Button variant="destructive" disabled={!targetId || blockMutation.isPending} onClick={() => blockMutation.mutate()}>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="destructive"
+            disabled={!targetId || blockMutation.isPending}
+            onClick={() => blockMutation.mutate()}
+          >
             Block
           </Button>
-          <Button variant="outline" disabled={!targetId || unblockMutation.isPending} onClick={() => unblockMutation.mutate()}>
+          <Button
+            variant="outline"
+            disabled={!targetId || unblockMutation.isPending}
+            onClick={() => unblockMutation.mutate()}
+          >
             Unblock
           </Button>
         </div>
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-border p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">All movements</h2>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void qc.invalidateQueries({ queryKey: ["admin-movements"] });
+              void qc.invalidateQueries({ queryKey: ["admin-stats"] });
+            }}
+          >
+            Refresh
+          </Button>
+        </div>
+
+        {movementsQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading movements…</p>
+        ) : movementsQuery.isError ? (
+          <p className="text-sm text-destructive">Could not load movements.</p>
+        ) : (movementsQuery.data ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">No transactions yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {(movementsQuery.data ?? []).map((m) => (
+              <div
+                key={m.id}
+                className="rounded-lg border border-border px-3 py-2 text-xs"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold capitalize">{m.type}</span>
+                  <span className="font-bold">
+                    {Number(m.amount).toFixed(2)} ETB
+                  </span>
+                </div>
+                <p className="mt-1 text-muted-foreground">
+                  {new Date(m.created_at).toLocaleString()}
+                </p>
+                {m.note ? <p className="mt-1">{m.note}</p> : null}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number | undefined }) {
+function Stat({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | string | undefined;
+}) {
   return (
-    <div className="rounded-xl border p-3">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="text-lg font-bold">{value ?? "—"}</div>
+    <div className="rounded-xl border border-border p-3">
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-bold">
+        {value === undefined || value === null ? "—" : value}
+      </p>
     </div>
   );
 }
