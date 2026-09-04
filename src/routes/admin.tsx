@@ -12,7 +12,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-const ADMIN_EMAIL = "ketemebiruk928@gmail.com";
+const ADMIN_EMAIL = "ketemabiruk928@gmail.com";
 
 function AdminPage() {
   const { user, loading: authLoading, refresh, signOut } = useAuth();
