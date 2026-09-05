@@ -68,7 +68,15 @@ function AuthPage() {
   };
 
   const register = async () => {
-    if (phone.replace(/\D/g, "").length < 9) {
+    // Only this number can create accounts for now
+    const digits = phone.replace(/\D/g, "");
+    const allowed = ["0963154217", "963154217", "251963154217"];
+    if (!allowed.includes(digits)) {
+      toast.error("New account registration is temporarily closed. Only authorized numbers can register.");
+      return;
+    }
+
+    if (digits.length < 9) {
       toast.error("Enter a valid Ethiopian phone number");
       return;
     }
