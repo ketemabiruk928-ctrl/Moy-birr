@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,68 +12,17 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-const ADMIN_EMAIL = "ketemabiruk928@gmail.com";
+// Only this phone account can use admin
+const ADMIN_PHONE_EMAIL = "0963154217@moybirr.app";
 
 function AdminPage() {
-  const { user, loading: authLoading, refresh, signOut } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const qc = useQueryClient();
-
-  const [email, setEmail] = useState(ADMIN_EMAIL);
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [targetId, setTargetId] = useState("");
   const [reason, setReason] = useState("");
 
   const isAllowedAdmin =
-    !!user?.email && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-
-  const sendOtp = async () => {
-    const cleanEmail = email.trim().toLowerCase();
-    if (cleanEmail !== ADMIN_EMAIL.toLowerCase()) {
-      toast.error("Only the authorized admin email can request OTP");
-      return;
-    }
-    setBusy(true);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: cleanEmail,
-        options: {
-          shouldCreateUser: false,
-        },
-      });
-      if (error) throw error;
-      setOtpSent(true);
-      toast.success("OTP sent to your email");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const verifyOtp = async () => {
-    const cleanEmail = email.trim().toLowerCase();
-    if (!otp.trim()) {
-      toast.error("Enter the OTP code");
-      return;
-    }
-    setBusy(true);
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        email: cleanEmail,
-        token: otp.trim(),
-        type: "email",
-      });
-      if (error) throw error;
-      await refresh();
-      toast.success("Admin verified");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+    !!user?.email && user.email.toLowerCase() === ADMIN_PHONE_EMAIL.toLowerCase();
 
   const statsQuery = useQuery({
     queryKey: ["admin-stats"],
@@ -151,53 +100,32 @@ function AdminPage() {
     );
   }
 
+  // Not logged in with admin phone
+  if (!user) {
+    return (
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-4 px-4 text-center">
+        <h1 className="text-2xl font-bold">Moybirr Admin</h1>
+        <p className="text-sm text-muted-foreground">
+          Log in with your admin phone number first, then open this page again.
+        </p>
+        <Button asChild>
+          <Link to="/auth">Go to login</Link>
+        </Button>
+      </div>
+    );
+  }
+
   if (!isAllowedAdmin) {
     return (
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-4 px-4">
-        <div>
-          <h1 className="text-2xl font-bold">Moybirr Admin</h1>
-          <p className="text-sm text-muted-foreground">
-            Enter admin email. We will send an OTP code to your email.
-          </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="email">Admin email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
-
-        {!otpSent ? (
-          <Button disabled={busy} onClick={() => void sendOtp()}>
-            {busy ? "Sending…" : "Send OTP to email"}
-          </Button>
-        ) : (
-          <>
-            <div className="space-y-1.5">
-              <Label htmlFor="otp">OTP code</Label>
-              <Input
-                id="otp"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="6-digit code"
-              />
-            </div>
-            <Button disabled={busy} onClick={() => void verifyOtp()}>
-              {busy ? "Verifying…" : "Verify OTP & Enter"}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => void sendOtp()}
-            >
-              Resend OTP
-            </Button>
-          </>
-        )}
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-4 px-4 text-center">
+        <h1 className="text-xl font-bold">Access denied</h1>
+        <p className="text-sm text-muted-foreground">
+          This account is not the authorized admin phone.
+        </p>
+        <p className="text-xs text-muted-foreground">Current: {user.email}</p>
+        <Button variant="outline" onClick={() => void signOut()}>
+          Log out and try admin phone
+        </Button>
       </div>
     );
   }
@@ -209,7 +137,7 @@ function AdminPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Moybirr Admin</h1>
-          <p className="text-xs text-muted-foreground">{user?.email}</p>
+          <p className="text-xs text-muted-foreground">Phone admin · {user.email}</p>
         </div>
         <Button size="sm" variant="outline" onClick={() => void signOut()}>
           Log out
@@ -218,7 +146,7 @@ function AdminPage() {
 
       {statsQuery.isError ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
-          Could not load stats. Check admin role.
+          Could not load stats. Check admin role in Supabase.
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
@@ -236,6 +164,8 @@ function AdminPage() {
 
       <div className="space-y-3 rounded-xl border border-border p-4">
         <h2 className="text-sm font-semibold">Block / Unblock member</h2>
+        <p className="text-xs text-muted-foreground">Use Moybirr ID (example MG-000042)</p>
+
         <div className="space-y-1.5">
           <Label htmlFor="tid">Moybirr ID</Label>
           <Input
@@ -245,14 +175,17 @@ function AdminPage() {
             placeholder="MG-000042"
           />
         </div>
+
         <div className="space-y-1.5">
           <Label htmlFor="reason">Reason</Label>
           <Input
             id="reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
+            placeholder="fraud / abuse"
           />
         </div>
+
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant="destructive"
@@ -285,6 +218,7 @@ function AdminPage() {
             Refresh
           </Button>
         </div>
+
         {(movementsQuery.data ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">No transactions yet.</p>
         ) : (
@@ -315,4 +249,4 @@ function Stat({ label, value }: { label: string; value: number | string | undefi
       <p className="mt-1 text-lg font-bold">{value ?? "—"}</p>
     </div>
   );
-}         
+}      
