@@ -101,7 +101,7 @@ function AdminPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success(`${targetId} blocked`);
+      toast.success(targetId + " blocked");
       setTargetId("");
       setReason("");
       void qc.invalidateQueries({ queryKey: ["admin-stats"] });
@@ -118,7 +118,7 @@ function AdminPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success(`${targetId} unblocked`);
+      toast.success(targetId + " unblocked");
       setTargetId("");
       void qc.invalidateQueries({ queryKey: ["admin-stats"] });
       void qc.invalidateQueries({ queryKey: ["admin-members"] });
@@ -142,7 +142,7 @@ function AdminPage() {
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <p className="text-muted-foreground">Loading…</p>
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
@@ -162,7 +162,7 @@ function AdminPage() {
         <div className="mx-auto -mt-6 w-full max-w-lg px-4">
           <Card className="shadow-card space-y-4 p-5 text-center">
             <p className="text-sm text-muted-foreground">
-              Log in with admin phone <b>0963154217</b> first, then open this page again.
+              Log in with admin phone 0963154217 first, then open this page again.
             </p>
             <Button asChild className="w-full">
               <Link to="/auth">Go to login</Link>
@@ -198,7 +198,6 @@ function AdminPage() {
 
   return (
     <div className="min-h-screen bg-background pb-10">
-      {/* Same style as Moybirr login header */}
       <div className="bg-gradient-primary px-6 pt-14 pb-12 text-primary-foreground">
         <div className="mx-auto flex w-full max-w-lg items-start justify-between gap-3">
           <div>
@@ -206,7 +205,7 @@ function AdminPage() {
               <Wallet className="size-6" />
             </div>
             <h1 className="mt-4 text-3xl font-bold tracking-tight">Moybirr Admin</h1>
-            <p className="mt-1 text-sm opacity-90">Members, movements & control</p>
+            <p className="mt-1 text-sm opacity-90">Members, movements and control</p>
             <p className="mt-1 text-xs opacity-75">{user.email}</p>
           </div>
           <Button
@@ -221,7 +220,6 @@ function AdminPage() {
       </div>
 
       <div className="mx-auto -mt-6 w-full max-w-lg space-y-4 px-4">
-        {/* Stats */}
         <Card className="shadow-card grid grid-cols-2 gap-3 p-4">
           <Stat label="Guests" value={stats?.guests} />
           <Stat label="Staff" value={stats?.staff} />
@@ -231,7 +229,6 @@ function AdminPage() {
           <Stat label="Volume (ETB)" value={stats?.total_transaction_volume} />
         </Card>
 
-        {/* Members list */}
         <Card className="shadow-card space-y-3 p-4">
           <div className="flex items-center gap-2">
             <Users className="size-4 text-primary" />
@@ -258,7 +255,7 @@ function AdminPage() {
           </div>
 
           {membersQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading members…</p>
+            <p className="text-sm text-muted-foreground">Loading members...</p>
           ) : filteredMembers.length === 0 ? (
             <p className="text-sm text-muted-foreground">No members found.</p>
           ) : (
@@ -267,7 +264,119 @@ function AdminPage() {
                 <div key={m.id} className="rounded-xl border border-border p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">
-                        {m.full_name || "No name"}
-                      </p>
-                      <p className="text-xs text-muted-foreground
+                      <p className="truncate text-sm font-semibold">{m.full_name || "No name"}</p>
+                      <p className="text-xs text-muted-foreground">{m.phone || "No phone"}</p>
+                      <p className="text-xs text-muted-foreground">{m.moybirr_id || "No Moybirr ID"}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge variant="secondary" className="capitalize">
+                        {m.role}
+                      </Badge>
+                      {m.is_blocked ? <Badge variant="destructive">Blocked</Badge> : null}
+                    </div>
+                  </div>
+                  {m.moybirr_id ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2"
+                      onClick={() => setTargetId(m.moybirr_id || "")}
+                    >
+                      Use ID for block/unblock
+                    </Button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card className="shadow-card space-y-3 p-4">
+          <h2 className="text-sm font-semibold">Block / Unblock member</h2>
+          <div className="space-y-1.5">
+            <Label htmlFor="tid">Moybirr ID</Label>
+            <Input
+              id="tid"
+              value={targetId}
+              onChange={(e) => setTargetId(e.target.value.toUpperCase())}
+              placeholder="MG-000042"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="reason">Reason</Label>
+            <Input
+              id="reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="fraud / abuse"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="destructive"
+              disabled={!targetId || blockMutation.isPending}
+              onClick={() => blockMutation.mutate()}
+            >
+              Block
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!targetId || unblockMutation.isPending}
+              onClick={() => unblockMutation.mutate()}
+            >
+              Unblock
+            </Button>
+          </div>
+        </Card>
+
+        <Card className="shadow-card space-y-3 p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Recent movements</h2>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void qc.invalidateQueries({ queryKey: ["admin-movements"] });
+                void qc.invalidateQueries({ queryKey: ["admin-members"] });
+                void qc.invalidateQueries({ queryKey: ["admin-stats"] });
+              }}
+            >
+              Refresh
+            </Button>
+          </div>
+          {(movementsQuery.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No transactions yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {(movementsQuery.data ?? []).map((m) => (
+                <div key={m.id} className="rounded-xl border border-border px-3 py-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold capitalize">{m.type}</span>
+                    <span className="font-bold">{Number(m.amount).toFixed(2)} ETB</span>
+                  </div>
+                  <p className="mt-1 text-muted-foreground">
+                    {new Date(m.created_at).toLocaleString()}
+                  </p>
+                  {m.note ? <p className="mt-1">{m.note}</p> : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number | string | undefined }) {
+  return (
+    <div className="rounded-xl bg-muted/60 p-3">
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-bold">{value ?? "-"}</p>
+    </div>
+  );
+}
+
+              
+
+      
