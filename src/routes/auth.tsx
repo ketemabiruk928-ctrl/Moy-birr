@@ -47,6 +47,12 @@ function AuthPage() {
   const [name, setName] = useState("");
   const [role, setRole] = useState<Role>("guest");
 
+  // Staff workplace fields
+  const [staffCity, setStaffCity] = useState("");
+  const [staffSubcity, setStaffSubcity] = useState("");
+  const [staffHotelName, setStaffHotelName] = useState("");
+  const [staffHotelCode, setStaffHotelCode] = useState("");
+
   if (session) {
     void navigate({ to: "/" });
   }
@@ -68,8 +74,9 @@ function AuthPage() {
   };
 
   const register = async () => {
-    // Only this number can create accounts for now
     const digits = phone.replace(/\D/g, "");
+
+    // Temporary: only authorized phone can create accounts
     const allowed = ["0963154217", "963154217", "251963154217"];
     if (!allowed.includes(digits)) {
       toast.error("New account registration is temporarily closed. Only authorized numbers can register.");
@@ -84,6 +91,14 @@ function AuthPage() {
       toast.error("Password must be at least 6 characters");
       return;
     }
+
+    if (role === "staff") {
+      if (!staffCity.trim() || !staffSubcity.trim() || !staffHotelName.trim() || !staffHotelCode.trim()) {
+        toast.error("Staff must fill city, subcity, hotel name and Hotel ID");
+        return;
+      }
+    }
+
     setBusy(true);
     const { data, error } = await supabase.auth.signUp({
       email: phoneToEmail(phone),
@@ -98,20 +113,46 @@ function AuthPage() {
       toast.error(error.message);
       return;
     }
-    // Make sure the new account is signed in and permanently provisioned.
+
     if (!data.session) {
       await supabase.auth.signInWithPassword({ email: phoneToEmail(phone), password });
     }
+
     await supabase.rpc("ensure_my_account", {
       _full_name: name,
       _phone: normalizePhone(phone),
       _role: role,
     });
+
+    if (role === "staff") {
+      const { error: linkErr } = await supabase.rpc("link_staff_to_hotel_code", {
+        _hotel_code: staffHotelCode.trim(),
+        _workplace_name: staffHotelName.trim(),
+      });
+      if (linkErr) {
+        setBusy(false);
+        toast.error(linkErr.message);
+        return;
+      }
+
+      const uid = (await supabase.auth.getUser()).data.user?.id;
+      if (uid) {
+        await supabase
+          .from("staff_profiles")
+          .update({
+            city: staffCity.trim(),
+            subcity: staffSubcity.trim(),
+            workplace_hotel_name: staffHotelName.trim(),
+            hotel_code: staffHotelCode.trim().toUpperCase(),
+          })
+          .eq("user_id", uid);
+      }
+    }
+
     setBusy(false);
     await refresh();
     toast.success("Account created — your wallet is ready!");
     void navigate({ to: "/" });
-
   };
 
   return (
@@ -127,7 +168,7 @@ function AuthPage() {
         </div>
       </div>
 
-      <div className="mx-auto -mt-6 w-full max-w-lg px-4 pb-16">
+      <div className="mx-auto -mt-6 w-full max-w-lg px-4 pb-10">
         <Card className="shadow-card p-5">
           <Tabs defaultValue="login">
             <TabsList className="grid w-full grid-cols-2">
@@ -204,6 +245,37 @@ function AuthPage() {
                   ))}
                 </div>
               </div>
+
+              {role === "staff" ? (
+                <div className="space-y-3 rounded-xl border border-border p-3">
+                  <p className="text-xs font-semibold text-muted-foreground">Staff workplace details</p>
+                  <div className="space-y-1.5">
+                    <Label>City</Label>
+                    <Input value={staffCity} onChange={(e) => setStaffCity(e.target.value)} placeholder="Addis Ababa" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Subcity</Label>
+                    <Input value={staffSubcity} onChange={(e) => setStaffSubcity(e.target.value)} placeholder="Bole" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Current hotel / workplace name</Label>
+                    <Input
+                      value={staffHotelName}
+                      onChange={(e) => setStaffHotelName(e.target.value)}
+                      placeholder="Hotel name"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Hotel ID (from owner / Moybirr)</Label>
+                    <Input
+                      value={staffHotelCode}
+                      onChange={(e) => setStaffHotelCode(e.target.value.toUpperCase())}
+                      placeholder="MH-000001"
+                    />
+                  </div>
+                </div>
+              ) : null}
+
               <Button className="w-full" size="lg" disabled={busy} onClick={register}>
                 {t("register")}
               </Button>
@@ -218,3 +290,4 @@ function AuthPage() {
     </div>
   );
 }
+              
