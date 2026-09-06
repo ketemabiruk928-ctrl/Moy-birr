@@ -1,16 +1,17 @@
-
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Plus, Trash2, Image as ImageIcon, Video, BedDouble } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth";
-import { useLang } from "@/lib/i18n";
+import { formatETB } from "@/lib/i18n";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card } from "@/components/ui/card";
-import { UploadButton, MediaImg } from "@/components/Media";
+import { Badge } from "@/components/ui/badge";
+import { MediaImg, MediaVideo, UploadButton } from "@/components/Media";
+import { useAuth } from "@/lib/auth";
 
 type Hotel = {
   id: string;
@@ -23,82 +24,11 @@ type Hotel = {
   total_beds?: number | null;
 };
 
-type Room = {
-  id: string;
-  room_type: string;
-  price: number;
-  capacity: number;
-};
-
-export function OwnerProperty() {
-  const { user } = useAuth();
-  const { t } = useLang();
+export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
   const qc = useQueryClient();
-
-  const hotelQuery = useQuery({
-    queryKey: ["my-hotel", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("hotels")
-        .select("id, name, city, description, photo_url, price_from, trade_license_url, total_beds")
-        .eq("owner_id", user!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data as Hotel | null;
-    },
-  });
-
-  const roomsQuery = useQuery({
-    queryKey: ["my-rooms", hotelQuery.data?.id],
-    enabled: !!hotelQuery.data?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("rooms")
-        .select("id, room_type, price, capacity")
-        .eq("hotel_id", hotelQuery.data!.id)
-        .order("price");
-      if (error) throw error;
-      return (data ?? []) as Room[];
-    },
-  });
-
-  return (
-    <div className="space-y-4">
-      <Card className="shadow-card space-y-4 p-4">
-        <h2 className="text-base font-semibold">{t("dashboard")}: Property</h2>
-        <PropertyForm
-          hotel={hotelQuery.data}
-          onSaved={() => {
-            void qc.invalidateQueries({ queryKey: ["my-hotel"] });
-          }}
-        />
-      </Card>
-
-      {hotelQuery.data?.id ? (
-        <Card className="shadow-card space-y-4 p-4">
-          <h3 className="text-sm font-semibold">Rooms</h3>
-          <RoomsEditor
-            hotelId={hotelQuery.data.id}
-            rooms={roomsQuery.data ?? []}
-            onChanged={() => void qc.invalidateQueries({ queryKey: ["my-rooms"] })}
-          />
-        </Card>
-      ) : null}
-    </div>
-  );
-}
-
-function PropertyForm({
-  hotel,
-  onSaved,
-}: {
-  hotel: Hotel | null | undefined;
-  onSaved: () => void;
-}) {
   const { user } = useAuth();
   const [name, setName] = useState(hotel?.name ?? "");
-  const [city, setCity] = useState(hotel?.city ?? "");
+  const [city, setCity] = useState(hotel?.city ?? "Addis Ababa");
   const [description, setDescription] = useState(hotel?.description ?? "");
   const [photoUrl, setPhotoUrl] = useState(hotel?.photo_url ?? "");
   const [priceFrom, setPriceFrom] = useState(hotel ? String(hotel.price_from) : "");
@@ -109,75 +39,99 @@ function PropertyForm({
 
   useEffect(() => {
     if (!hotel) return;
-    setName(hotel.name ?? "");
-    setCity(hotel.city ?? "");
+    setName(hotel.name);
+    setCity(hotel.city);
     setDescription(hotel.description ?? "");
     setPhotoUrl(hotel.photo_url ?? "");
-    setPriceFrom(String(hotel.price_from ?? ""));
+    setPriceFrom(String(hotel.price_from));
     setTradeLicenseUrl(hotel.trade_license_url ?? "");
     setTotalBeds(hotel.total_beds != null ? String(hotel.total_beds) : "");
   }, [hotel]);
 
   const save = useMutation({
     mutationFn: async () => {
-      const { data: hotelId, error } = await supabase.rpc("save_my_hotel", {
+      const { error } = await supabase.rpc("save_my_hotel", {
         _name: name,
         _city: city,
         _description: description,
         _photo_url: photoUrl,
         _price_from: priceFrom ? Number(priceFrom) : 0,
+        _trade_license_url: tradeLicenseUrl || null,
       });
       if (error) throw error;
 
-      if (hotelId) {
-        const { error: e2 } = await supabase
+      // Save optional beds after hotel exists
+      let hotelId = hotel?.id;
+      if (!hotelId && user?.id) {
+        const { data: created } = await supabase
           .from("hotels")
-          .update({
-            trade_license_url: tradeLicenseUrl || null,
-            total_beds: totalBeds ? Number(totalBeds) : null,
-          })
+          .select("id")
+          .eq("owner_id", user.id)
+          .maybeSingle();
+        hotelId = created?.id;
+      }
+      if (hotelId) {
+        const { error: bedsErr } = await supabase
+          .from("hotels")
+          .update({ total_beds: totalBeds ? Number(totalBeds) : null })
           .eq("id", hotelId);
-        if (e2) throw e2;
+        if (bedsErr) throw bedsErr;
       }
     },
     onSuccess: () => {
-      toast.success("Property saved");
-      onSaved();
+      toast.success(hotel ? "Property updated" : "Property registered");
+      void qc.invalidateQueries({ queryKey: ["my-hotel"] });
+      void qc.invalidateQueries({ queryKey: ["hotels"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   return (
-    <div className="space-y-3">
+    <Card className="shadow-card space-y-3 p-4">
+      <p className="text-sm font-semibold">
+        {hotel ? "Property details" : "Register your property"}
+      </p>
       <div className="space-y-1.5">
-        <Label htmlFor="hn">Hotel / place name</Label>
+        <Label htmlFor="hn">Hotel name</Label>
         <Input id="hn" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sheba Grand Hotel" />
       </div>
-
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="city">City</Label>
-          <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Addis Ababa" />
+          <Label htmlFor="hc">City</Label>
+          <Input id="hc" value={city} onChange={(e) => setCity(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="price">From price (ETB)</Label>
+          <Label htmlFor="hp">From price (ETB)</Label>
           <Input
-            id="price"
+            id="hp"
             type="number"
-            inputMode="decimal"
+            inputMode="numeric"
             value={priceFrom}
             onChange={(e) => setPriceFrom(e.target.value)}
-            placeholder="1500"
           />
         </div>
       </div>
-
+      <div className="space-y-1.5">
+        <Label htmlFor="hi">Cover photo</Label>
+        {photoUrl ? (
+          <MediaImg src={photoUrl} alt="Cover photo" className="h-36 w-full rounded-xl object-cover" />
+        ) : null}
+        {user ? (
+          <UploadButton userId={user.id} label="Upload cover photo" onUploaded={setPhotoUrl} />
+        ) : null}
+        <Input
+          id="hi"
+          value={photoUrl}
+          onChange={(e) => setPhotoUrl(e.target.value)}
+          placeholder="…or paste an image URL"
+        />
+      </div>
       <div className="space-y-1.5">
         <Label htmlFor="beds">
           Total beds <span className="font-normal text-muted-foreground">(optional)</span>
         </Label>
         <p className="text-xs text-muted-foreground">
-          For hotels with rooms/beds. Leave empty for restaurant-only places.
+          For hotels with beds. Leave empty for restaurants.
         </p>
         <Input
           id="beds"
@@ -188,72 +142,74 @@ function PropertyForm({
           placeholder="e.g. 40"
         />
       </div>
-
       <div className="space-y-1.5">
-        <Label htmlFor="desc">Description</Label>
+        <Label htmlFor="hd">Description</Label>
         <Textarea
-          id="desc"
+          id="hd"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Short description of your place"
+          placeholder="Rooftop restaurant, spa, free airport shuttle…"
         />
       </div>
-
-      <div className="space-y-2">
-        <Label>Cover photo</Label>
-        {photoUrl ? (
-          <MediaImg src={photoUrl} alt={name || "Hotel"} className="h-36 w-full rounded-xl object-cover" />
-        ) : null}
-        {user ? (
-          <UploadButton
-            userId={user.id}
-            label="Upload cover photo"
-            accept="image/*"
-            onUploaded={(url) => setPhotoUrl(url)}
-          />
-        ) : null}
-      </div>
-
-      <div className="space-y-2">
-        <Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="tl">
           Trade licence <span className="font-normal text-muted-foreground">(optional)</span>
         </Label>
+        <p className="text-xs text-muted-foreground">
+          Attach your trade licence if you want. This is not mandatory.
+        </p>
         {tradeLicenseUrl ? (
-          <a href={tradeLicenseUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">
-            View uploaded licence
+          <a
+            href={tradeLicenseUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="block truncate text-xs text-primary underline"
+          >
+            View current licence
           </a>
         ) : null}
         {user ? (
           <UploadButton
             userId={user.id}
-            label="Upload trade licence"
             accept="image/*,application/pdf"
-            onUploaded={(url) => setTradeLicenseUrl(url)}
+            label="Upload trade licence"
+            onUploaded={setTradeLicenseUrl}
           />
         ) : null}
+        <Input
+          id="tl"
+          value={tradeLicenseUrl}
+          onChange={(e) => setTradeLicenseUrl(e.target.value)}
+          placeholder="…or paste a document / image URL"
+        />
       </div>
-
-      <Button className="w-full" disabled={save.isPending || !name} onClick={() => save.mutate()}>
-        {save.isPending ? "Saving…" : "Save property"}
+      <Button className="w-full" disabled={!name || save.isPending} onClick={() => save.mutate()}>
+        {hotel ? "Save changes" : "Register property"}
       </Button>
-    </div>
+    </Card>
   );
 }
 
-function RoomsEditor({
-  hotelId,
-  rooms,
-  onChanged,
-}: {
-  hotelId: string;
-  rooms: Room[];
-  onChanged: () => void;
-}) {
+export function RoomsManager({ hotelId }: { hotelId: string }) {
+  const qc = useQueryClient();
   const [roomType, setRoomType] = useState("");
   const [price, setPrice] = useState("");
   const [capacity, setCapacity] = useState("2");
 
-  const addRoom = useMutation({
+  const rooms = useQuery({
+    queryKey: ["owner-rooms", hotelId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("rooms")
+        .select("*")
+        .eq("hotel_id", hotelId)
+        .order("price");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const add = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("rooms").insert({
         hotel_id: hotelId,
@@ -268,59 +224,274 @@ function RoomsEditor({
       setRoomType("");
       setPrice("");
       setCapacity("2");
-      onChanged();
+      void qc.invalidateQueries({ queryKey: ["owner-rooms", hotelId] });
+      void qc.invalidateQueries({ queryKey: ["rooms", hotelId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const removeRoom = useMutation({
+  const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("rooms").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Room removed");
-      onChanged();
+      void qc.invalidateQueries({ queryKey: ["owner-rooms", hotelId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const totalCapacity = (rooms.data ?? []).reduce((s, r) => s + r.capacity, 0);
+
+  return (
+    <div className="space-y-3">
+      <Card className="shadow-card space-y-3 p-4">
+        <p className="flex items-center gap-1.5 text-sm font-semibold">
+          <BedDouble className="size-4 text-primary" />
+          Add room &amp; price
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="rt">Room type</Label>
+          <Input
+            id="rt"
+            value={roomType}
+            onChange={(e) => setRoomType(e.target.value)}
+            placeholder="Deluxe double"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="rp">Price / night (ETB)</Label>
+            <Input
+              id="rp"
+              type="number"
+              inputMode="numeric"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="rc">Capacity (guests)</Label>
+            <Input
+              id="rc"
+              type="number"
+              inputMode="numeric"
+              value={capacity}
+              onChange={(e) => setCapacity(e.target.value)}
+            />
+          </div>
+        </div>
+        <Button
+          className="w-full"
+          disabled={!roomType || !price || add.isPending}
+          onClick={() => add.mutate()}
+        >
+          <Plus className="mr-2 size-4" />
+          Add room
+        </Button>
+      </Card>
+
+      {(rooms.data ?? []).length === 0 ? (
+        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
+          No rooms listed yet. Add your room types and prices so guests can book.
+        </Card>
+      ) : (
+        <>
+          <p className="px-1 text-xs text-muted-foreground">
+            {(rooms.data ?? []).length} room types · total capacity {totalCapacity} guests
+          </p>
+          {(rooms.data ?? []).map((r) => (
+            <Card key={r.id} className="shadow-card flex items-center justify-between p-4">
+              <div>
+                <p className="text-sm font-semibold">{r.room_type}</p>
+                <p className="text-xs text-muted-foreground">Up to {r.capacity} guests</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <p className="text-sm font-bold">{formatETB(r.price)}</p>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label={`Remove ${r.room_type}`}
+                  onClick={() => remove.mutate(r.id)}
+                >
+                  <Trash2 className="size-4 text-destructive" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+export function ShowcaseManager({
+  hotelId,
+  premiumActive = false,
+}: {
+  hotelId: string;
+  premiumActive?: boolean;
+}) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const [kind, setKind] = useState<"photo" | "video">("photo");
+  const [url, setUrl] = useState("");
+  const [caption, setCaption] = useState("");
+
+  const media = useQuery({
+    queryKey: ["hotel-media", hotelId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("hotel_media")
+        .select("*")
+        .eq("hotel_id", hotelId)
+        .order("sort_order")
+        .order("created_at");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const add = useMutation({
+    mutationFn: async () => {
+      if (!premiumActive) {
+        throw new Error("Monthly subscription required to post photos and videos");
+      }
+      const { error } = await supabase
+        .from("hotel_media")
+        .insert({ hotel_id: hotelId, kind, url, caption });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Added to your showcase");
+      setUrl("");
+      setCaption("");
+      void qc.invalidateQueries({ queryKey: ["hotel-media", hotelId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("hotel_media").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["hotel-media", hotelId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   return (
     <div className="space-y-3">
-      {rooms.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No rooms yet. Add your first room below.</p>
-      ) : (
-        <div className="space-y-2">
-          {rooms.map((r) => (
-            <div key={r.id} className="flex items-center justify-between rounded-xl border border-border px-3 py-2">
-              <div>
-                <p className="text-sm font-medium">{r.room_type}</p>
-                <p className="text-xs text-muted-foreground">
-                  {r.price} ETB · capacity {r.capacity}
-                </p>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => removeRoom.mutate(r.id)}>
-                Remove
+      <Card className="shadow-card space-y-3 p-4">
+        <p className="text-sm font-semibold">Advertise your best service</p>
+        <p className="text-xs text-muted-foreground">
+          Add photos and videos of your rooms, restaurant and spa. Guests see them on your hotel
+          page while your monthly plan is active.
+        </p>
+
+        {!premiumActive ? (
+          <div className="rounded-xl border border-dashed border-border bg-muted/50 p-4 text-center">
+            <p className="text-sm font-medium">Subscription required</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Pay the monthly listing plan (500 ETB) to post photos and videos that promote your
+              hotel.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={kind === "photo" ? "default" : "outline"}
+                className="flex-1"
+                onClick={() => setKind("photo")}
+              >
+                <ImageIcon className="mr-2 size-4" />
+                Photo
+              </Button>
+              <Button
+                size="sm"
+                variant={kind === "video" ? "default" : "outline"}
+                className="flex-1"
+                onClick={() => setKind("video")}
+              >
+                <Video className="mr-2 size-4" />
+                Video
               </Button>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="space-y-1.5">
+              <Label htmlFor="mu">{kind === "photo" ? "Photo" : "Video (mp4)"}</Label>
+              {user ? (
+                <UploadButton
+                  userId={user.id}
+                  accept={kind === "photo" ? "image/*" : "video/*"}
+                  label={kind === "photo" ? "Upload photo" : "Upload video"}
+                  onUploaded={setUrl}
+                />
+              ) : null}
+              <Input
+                id="mu"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="…or paste a URL"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mc">Caption</Label>
+              <Input
+                id="mc"
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Rooftop restaurant with city view"
+              />
+            </div>
+            <Button className="w-full" disabled={!url || add.isPending} onClick={() => add.mutate()}>
+              <Plus className="mr-2 size-4" />
+              Add to showcase
+            </Button>
+          </>
+        )}
+      </Card>
 
-      <div className="space-y-2 rounded-xl border border-dashed border-border p-3">
-        <Input value={roomType} onChange={(e) => setRoomType(e.target.value)} placeholder="Room type (e.g. Deluxe)" />
-        <div className="grid grid-cols-2 gap-2">
-          <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price ETB" />
-          <Input type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} placeholder="Capacity" />
-        </div>
-        <Button
-          className="w-full"
-          disabled={!roomType || !price || addRoom.isPending}
-          onClick={() => addRoom.mutate()}
-        >
-          Add room
-        </Button>
-      </div>
+      {(media.data ?? []).length === 0 ? (
+        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
+          Nothing in your showcase yet.
+        </Card>
+      ) : (
+        (media.data ?? []).map((m) => (
+          <Card key={m.id} className="shadow-card overflow-hidden p-0">
+            {m.kind === "video" ? (
+              <MediaVideo src={m.url} className="h-44 w-full bg-muted object-cover" />
+            ) : (
+              <MediaImg
+                src={m.url}
+                alt={m.caption ?? "Hotel service"}
+                className="h-44 w-full object-cover"
+              />
+            )}
+            <div className="flex items-center justify-between gap-2 p-3">
+              <div>
+                <Badge variant="secondary" className="capitalize">
+                  {m.kind}
+                </Badge>
+                <p className="mt-1 text-xs text-muted-foreground">{m.caption}</p>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Remove media"
+                onClick={() => remove.mutate(m.id)}
+              >
+                <Trash2 className="size-4 text-destructive" />
+              </Button>
+            </div>
+          </Card>
+        ))
+      )}
     </div>
   );
 }
+     
