@@ -1,561 +1,508 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { toast } from "sonner";
-import { TrendingUp, Users, BedDouble, Crown, Star, Plus, AlertTriangle } from "lucide-react";
-import { PropertyForm, RoomsManager, ShowcaseManager } from "@/components/OwnerProperty";
-import { TipQr } from "@/components/TipQr";
-
+import { Plus, Trash2, Image as ImageIcon, Video, BedDouble } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth";
-import { formatETB, useLang } from "@/lib/i18n";
-import { AppHeader, AppShell, RequireAuth } from "@/components/AppShell";
+import { formatETB } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { MediaImg, MediaVideo, UploadButton } from "@/components/Media";
+import { useAuth } from "@/lib/auth";
 
-export const Route = createFileRoute("/owner")({
-  head: () => ({
-    meta: [
-      { title: "Hotel Owner Dashboard — Moybirr" },
-      {
-        name: "description",
-        content:
-          "Track room revenue, tips and staff performance for your Ethiopian hotel, post vacancies and manage your Moybirr premium subscription.",
-      },
-      { property: "og:title", content: "Owner Dashboard — Moybirr" },
-      {
-        property: "og:description",
-        content: "Revenue reports, staff ratings and hiring tools for hotel owners.",
-      },
-    ],
-  }),
-  component: () => (
-    <RequireAuth>
-      <AppShell>
-        <OwnerPage />
-      </AppShell>
-    </RequireAuth>
-  ),
-});
+type Hotel = {
+  id: string;
+  name: string;
+  city: string;
+  description: string | null;
+  photo_url: string | null;
+  price_from: number;
+  trade_license_url?: string | null;
+  total_beds?: number | null;
+};
 
-function OwnerPage() {
-  const { t } = useLang();
-  const { user, role } = useAuth();
+export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const [name, setName] = useState(hotel?.name ?? "");
+  const [city, setCity] = useState(hotel?.city ?? "Addis Ababa");
+  const [description, setDescription] = useState(hotel?.description ?? "");
+  const [photoUrl, setPhotoUrl] = useState(hotel?.photo_url ?? "");
+  const [priceFrom, setPriceFrom] = useState(hotel ? String(hotel.price_from) : "");
+  const [tradeLicenseUrl, setTradeLicenseUrl] = useState(hotel?.trade_license_url ?? "");
+  const [totalBeds, setTotalBeds] = useState(
+    hotel?.total_beds != null ? String(hotel.total_beds) : "",
+  );
 
-  const hotel = useQuery({
-    queryKey: ["my-hotel", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("hotels")
-        .select("*")
-        .eq("owner_id", user!.id)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!user,
-  });
+  useEffect(() => {
+    if (!hotel) return;
+    setName(hotel.name);
+    setCity(hotel.city);
+    setDescription(hotel.description ?? "");
+    setPhotoUrl(hotel.photo_url ?? "");
+    setPriceFrom(String(hotel.price_from));
+    setTradeLicenseUrl(hotel.trade_license_url ?? "");
+    setTotalBeds(hotel.total_beds != null ? String(hotel.total_beds) : "");
+  }, [hotel]);
 
-  const hotelId = hotel.data?.id;
-
-  const bookings = useQuery({
-    queryKey: ["owner-bookings", hotelId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("*")
-        .eq("hotel_id", hotelId!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: !!hotelId,
-  });
-
-  const staff = useQuery({
-    queryKey: ["owner-staff", hotelId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("staff_profiles")
-        .select("id,position,rating,rating_count,city,subcity,workplace_hotel_name,hotel_code, profiles:user_id(full_name,phone)")
-        .eq("hotel_id", hotelId!)
-        .order("rating", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: !!hotelId,
-  });
-
-  const hotelRatings = useQuery({
-    queryKey: ["owner-hotel-ratings", hotelId],
-    enabled: !!hotelId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("hotel_ratings")
-        .select("id, stars, comment, created_at, profiles:guest_id(full_name)")
-        .eq("hotel_id", hotelId!)
-        .order("created_at", { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  const myJobs = useQuery({
-    queryKey: ["owner-jobs", hotelId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("jobs")
-        .select("*, job_applications(id,status,staff_id)")
-        .eq("hotel_id", hotelId!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: !!hotelId,
-  });
-
-  const tips = useQuery({
-    queryKey: ["owner-tips", hotelId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("transactions")
-        .select("amount")
-        .eq("type", "tip");
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: !!hotelId,
-  });
-
-  const premium = useQuery({
-    queryKey: ["owner-premium", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("subscriptions")
-        .select("end_date")
-        .eq("owner_id", user!.id)
-        .order("end_date", { ascending: false })
-        .limit(1);
-      if (error) throw error;
-      return data?.[0] ?? null;
-    },
-    enabled: !!user,
-  });
-
-
-  const subscribe = useMutation({
+  const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc("subscribe_premium");
+      const { error } = await supabase.rpc("save_my_hotel", {
+        _name: name,
+        _city: city,
+        _description: description,
+        _photo_url: photoUrl,
+        _price_from: priceFrom ? Number(priceFrom) : 0,
+        _trade_license_url: tradeLicenseUrl || null,
+      });
       if (error) throw error;
+
+      // Save optional beds after hotel exists
+      let hotelId = hotel?.id;
+      if (!hotelId && user?.id) {
+        const { data: created } = await supabase
+          .from("hotels")
+          .select("id")
+          .eq("owner_id", user.id)
+          .maybeSingle();
+        hotelId = created?.id;
+      }
+      if (hotelId) {
+        const { error: bedsErr } = await supabase
+          .from("hotels")
+          .update({ total_beds: totalBeds ? Number(totalBeds) : null })
+          .eq("id", hotelId);
+        if (bedsErr) throw bedsErr;
+      }
     },
     onSuccess: () => {
-      toast.success("Premium active for 30 days");
-      void qc.invalidateQueries({ queryKey: ["owner-premium"] });
-      void qc.invalidateQueries({ queryKey: ["wallet"] });
+      toast.success(hotel ? "Property updated" : "Property registered");
+      void qc.invalidateQueries({ queryKey: ["my-hotel"] });
+      void qc.invalidateQueries({ queryKey: ["hotels"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  if (role !== "owner") {
-    return (
-      <>
-        <AppHeader title={t("owner")} subtitle="Hotel owners only" />
-        <div className="-mt-6 px-4">
-          <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-            This dashboard is available to hotel owner accounts. Register a new account with the
-            Owner role to manage a property.
-          </Card>
-        </div>
-      </>
-    );
-  }
-
-  const confirmed = (bookings.data ?? []).filter((b) => b.status !== "cancelled");
-  const roomRevenue = confirmed.reduce((s, b) => s + Number(b.total), 0);
-  const tipTotal = (tips.data ?? []).reduce((s, x) => s + Number(x.amount), 0);
-  const occupancy = confirmed.filter((b) => new Date(b.check_out) >= new Date()).length;
-  const premiumUntil = premium.data ? new Date(premium.data.end_date) : null;
-  const premiumActive = !!premiumUntil && premiumUntil > new Date();
-
   return (
-    <>
-      <AppHeader title={t("owner")} subtitle={hotel.data?.name ?? "Register your property below"} />
-
-      {hotel.data?.hotel_code ? (
-        <div className="mx-4 -mt-4 mb-2 rounded-xl border border-border bg-card px-3 py-2 shadow-card">
-          <p className="text-[11px] text-muted-foreground">Hotel ID (give this to your staff)</p>
-          <p className="text-sm font-bold tracking-wide">{hotel.data.hotel_code}</p>
-        </div>
-      ) : null}
-
-      <div className="-mt-6 space-y-4 px-4 pb-6">
-        <Card className="shadow-card flex items-center justify-between gap-3 p-4">
-          <div>
-            <p className="flex items-center gap-1.5 text-sm font-semibold">
-              <Crown className="size-4 text-primary" />
-              Monthly listing plan
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {premiumActive
-                ? `Active until ${premiumUntil!.toLocaleDateString()}`
-                : "500 ETB / month — required to stay listed, post jobs and see analytics"}
-            </p>
-          </div>
-          {!premiumActive ? (
-            <Button size="sm" disabled={subscribe.isPending} onClick={() => subscribe.mutate()}>
-              Pay 500 ETB
-            </Button>
-          ) : (
-            <Badge variant="secondary">Active</Badge>
-          )}
-        </Card>
-
-        {!premiumActive ? (
-          <Card className="shadow-card flex items-start gap-2 border-destructive/40 p-4">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
-            <p className="text-xs text-muted-foreground">
-              Your listing is <span className="font-semibold text-destructive">paused</span>. Guests
-              cannot see your hotel, rooms or showcase and cannot book until this month&apos;s 500
-              ETB is paid. Everything is restored the moment you pay.
-            </p>
-          </Card>
-        ) : null}
-
-        {hotelId ? (
-          <div className="grid grid-cols-2 gap-3">
-            <Stat
-              icon={<TrendingUp className="size-4 text-primary" />}
-              label="Room revenue"
-              value={formatETB(roomRevenue)}
-            />
-            <Stat
-              icon={<Star className="size-4 text-primary" />}
-              label="Staff tips"
-              value={formatETB(tipTotal)}
-            />
-            <Stat
-              icon={<BedDouble className="size-4 text-primary" />}
-              label="Active stays"
-              value={String(occupancy)}
-            />
-            <Stat
-              icon={<Users className="size-4 text-primary" />}
-              label="Staff members"
-              value={String((staff.data ?? []).length)}
-            />
-          </div>
-        ) : null}
-
-        <Tabs defaultValue={hotelId ? "bookings" : "property"}>
-          <TabsList className="w-full justify-start overflow-x-auto">
-            <TabsTrigger value="property">Property</TabsTrigger>
-            <TabsTrigger value="rooms" disabled={!hotelId}>
-              Rooms
-            </TabsTrigger>
-            <TabsTrigger value="showcase" disabled={!hotelId}>
-              Showcase
-            </TabsTrigger>
-            <TabsTrigger value="bookings" disabled={!hotelId}>
-              Bookings
-            </TabsTrigger>
-            <TabsTrigger value="staff" disabled={!hotelId}>
-              Staff
-            </TabsTrigger>
-            <TabsTrigger value="jobs" disabled={!hotelId}>
-              Jobs
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="property" className="mt-3 space-y-3">
-            <PropertyForm hotel={hotel.data ?? null} />
-            {hotelId ? (
-              <TipQr
-                title="Table QR code"
-                description="Print this for your tables and reception. Guests scan it to pay the bill and tip your staff."
-                hotelId={hotelId}
-              />
-            ) : null}
-          </TabsContent>
-
-          <TabsContent value="rooms" className="mt-3">
-            {hotelId ? <RoomsManager hotelId={hotelId} /> : null}
-          </TabsContent>
-
-          <TabsContent value="showcase" className="mt-3">
-            {hotelId ? (
-              <ShowcaseManager hotelId={hotelId} premiumActive={!!premiumActive} />
-            ) : null}
-          </TabsContent>
-
-          <TabsContent value="bookings" className="mt-3 space-y-3">
-            {(bookings.data ?? []).length === 0 ? (
-              <Empty text="No bookings yet." />
-            ) : (
-              (bookings.data ?? []).map((b) => (
-                <Card key={b.id} className="shadow-card flex items-center justify-between p-4">
-                  <div>
-                    <p className="text-sm font-semibold">{b.room_type}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {b.check_in} → {b.check_out}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold">{formatETB(b.total)}</p>
-                    <Badge
-                      variant={b.status === "cancelled" ? "destructive" : "secondary"}
-                      className="mt-1"
-                    >
-                      {b.status}
-                    </Badge>
-                  </div>
-                </Card>
-              ))
-            )}
-          </TabsContent>
-
-          <TabsContent value="staff" className="mt-3 space-y-3">
-            <Card className="shadow-card p-4">
-              <p className="text-xs text-muted-foreground">Hotel service rating</p>
-              <p className="mt-1 text-2xl font-bold">
-                {(hotelRatings.data ?? []).length === 0
-                  ? "—"
-                  : (
-                      (hotelRatings.data ?? []).reduce((s, r) => s + Number(r.stars), 0) /
-                      (hotelRatings.data ?? []).length
-                    ).toFixed(1)}
-                <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  / 5 · {(hotelRatings.data ?? []).length} reviews
-                </span>
-              </p>
-            </Card>
-
-            <p className="text-sm font-semibold">Staff performance</p>
-            {(staff.data ?? []).length === 0 ? (
-              <Empty text="No staff linked yet. Share your Hotel ID so staff can register." />
-            ) : (
-              (staff.data ?? []).map((s) => {
-                const p = s.profiles as { full_name?: string; phone?: string } | null;
-                return (
-                  <Card key={s.id} className="shadow-card p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold">{p?.full_name || "Staff member"}</p>
-                        <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
-                        {p?.phone ? (
-                          <p className="text-xs text-muted-foreground">{p.phone}</p>
-                        ) : null}
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {[s.city, s.subcity].filter(Boolean).join(" · ") || "Location not set"}
-                        </p>
-                        {s.workplace_hotel_name ? (
-                          <p className="text-[11px] text-muted-foreground">
-                            Workplace: {s.workplace_hotel_name}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="text-right">
-                        <p className="flex items-center justify-end gap-1 text-sm font-bold">
-                          <Star className="size-4 fill-primary text-primary" />
-                          {Number(s.rating).toFixed(1)}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {s.rating_count} guest ratings
-                        </p>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })
-            )}
-
-            <p className="pt-2 text-sm font-semibold">Recent hotel reviews</p>
-            {(hotelRatings.data ?? []).length === 0 ? (
-              <Empty text="No hotel service reviews yet." />
-            ) : (
-              (hotelRatings.data ?? []).map((r) => {
-                const g = r.profiles as { full_name?: string } | null;
-                return (
-                  <Card key={r.id} className="shadow-card p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold">{g?.full_name || "Guest"}</p>
-                      <p className="flex items-center gap-1 text-sm font-bold">
-                        <Star className="size-4 fill-primary text-primary" />
-                        {r.stars}
-                      </p>
-                    </div>
-                    {r.comment ? (
-                      <p className="mt-1 text-sm text-muted-foreground">{r.comment}</p>
-                    ) : null}
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {new Date(r.created_at).toLocaleString()}
-                    </p>
-                  </Card>
-                );
-              })
-            )}
-          </TabsContent>
-
-          <TabsContent value="jobs" className="mt-3 space-y-3">
-            {hotelId ? (
-              <PostJobDialog hotelId={hotelId} premiumActive={!!premiumActive} />
-            ) : null}
-            {(myJobs.data ?? []).length === 0 ? (
-              <Empty text="No vacancies posted yet." />
-            ) : (
-              (myJobs.data ?? []).map((j) => {
-                const apps = (j.job_applications as { id: string }[] | null) ?? [];
-                return (
-                  <Card key={j.id} className="shadow-card space-y-1 p-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold">{j.title}</p>
-                      <Badge variant="secondary">{j.status}</Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {j.location}
-                      {j.salary ? ` · ${formatETB(j.salary)} / month` : ""}
-                    </p>
-                    <p className="text-xs font-medium text-primary">
-                      {apps.length} application{apps.length === 1 ? "" : "s"}
-                    </p>
-                  </Card>
-                );
-              })
-            )}
-          </TabsContent>
-        </Tabs>
+    <Card className="shadow-card space-y-3 p-4">
+      <p className="text-sm font-semibold">
+        {hotel ? "Property details" : "Register your property"}
+      </p>
+      <div className="space-y-1.5">
+        <Label htmlFor="hn">Hotel name</Label>
+        <Input id="hn" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sheba Grand Hotel" />
       </div>
-    </>
-  );
-}
-
-
-function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <Card className="shadow-card p-4">
-      <div className="flex size-9 items-center justify-center rounded-xl bg-accent">{icon}</div>
-      <p className="mt-2 text-xs text-muted-foreground">{label}</p>
-      <p className="text-lg font-bold">{value}</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="hc">City</Label>
+          <Input id="hc" value={city} onChange={(e) => setCity(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="hp">From price (ETB)</Label>
+          <Input
+            id="hp"
+            type="number"
+            inputMode="numeric"
+            value={priceFrom}
+            onChange={(e) => setPriceFrom(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="hi">Cover photo</Label>
+        {photoUrl ? (
+          <MediaImg src={photoUrl} alt="Cover photo" className="h-36 w-full rounded-xl object-cover" />
+        ) : null}
+        {user ? (
+          <UploadButton userId={user.id} label="Upload cover photo" onUploaded={setPhotoUrl} />
+        ) : null}
+        <Input
+          id="hi"
+          value={photoUrl}
+          onChange={(e) => setPhotoUrl(e.target.value)}
+          placeholder="…or paste an image URL"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="beds">
+          Total beds <span className="font-normal text-muted-foreground">(optional)</span>
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          For hotels with beds. Leave empty for restaurants.
+        </p>
+        <Input
+          id="beds"
+          type="number"
+          inputMode="numeric"
+          value={totalBeds}
+          onChange={(e) => setTotalBeds(e.target.value)}
+          placeholder="e.g. 40"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="hd">Description</Label>
+        <Textarea
+          id="hd"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Rooftop restaurant, spa, free airport shuttle…"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="tl">
+          Trade licence <span className="font-normal text-muted-foreground">(optional)</span>
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          Attach your trade licence if you want. This is not mandatory.
+        </p>
+        {tradeLicenseUrl ? (
+          <a
+            href={tradeLicenseUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="block truncate text-xs text-primary underline"
+          >
+            View current licence
+          </a>
+        ) : null}
+        {user ? (
+          <UploadButton
+            userId={user.id}
+            accept="image/*,application/pdf"
+            label="Upload trade licence"
+            onUploaded={setTradeLicenseUrl}
+          />
+        ) : null}
+        <Input
+          id="tl"
+          value={tradeLicenseUrl}
+          onChange={(e) => setTradeLicenseUrl(e.target.value)}
+          placeholder="…or paste a document / image URL"
+        />
+      </div>
+      <Button className="w-full" disabled={!name || save.isPending} onClick={() => save.mutate()}>
+        {hotel ? "Save changes" : "Register property"}
+      </Button>
     </Card>
   );
 }
 
-function Empty({ text }: { text: string }) {
-  return (
-    <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">{text}</Card>
-  );
-}
-
-function PostJobDialog({ hotelId, premiumActive }: { hotelId: string; premiumActive: boolean }) {
+export function RoomsManager({ hotelId }: { hotelId: string }) {
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [location, setLocation] = useState("");
-  const [salary, setSalary] = useState("");
+  const [roomType, setRoomType] = useState("");
+  const [price, setPrice] = useState("");
+  const [capacity, setCapacity] = useState("2");
 
-  const post = useMutation({
+  const rooms = useQuery({
+    queryKey: ["owner-rooms", hotelId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("rooms")
+        .select("*")
+        .eq("hotel_id", hotelId)
+        .order("price");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const add = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc("post_job", {
-        _hotel_id: hotelId,
-        _title: title,
-        _description: description,
-        _location: location,
-        _salary: salary ? Number(salary) : 0,
+      const { error } = await supabase.from("rooms").insert({
+        hotel_id: hotelId,
+        room_type: roomType,
+        price: Number(price),
+        capacity: Number(capacity) || 2,
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Vacancy posted — 200 ETB charged to your wallet");
-      void qc.invalidateQueries({ queryKey: ["owner-jobs"] });
-      void qc.invalidateQueries({ queryKey: ["jobs"] });
-      void qc.invalidateQueries({ queryKey: ["wallet"] });
-      setOpen(false);
-      setTitle("");
-      setDescription("");
-      setLocation("");
-      setSalary("");
+      toast.success("Room added");
+      setRoomType("");
+      setPrice("");
+      setCapacity("2");
+      void qc.invalidateQueries({ queryKey: ["owner-rooms", hotelId] });
+      void qc.invalidateQueries({ queryKey: ["rooms", hotelId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("rooms").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Room removed");
+      void qc.invalidateQueries({ queryKey: ["owner-rooms", hotelId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const totalCapacity = (rooms.data ?? []).reduce((s, r) => s + r.capacity, 0);
+
+  return (
+    <div className="space-y-3">
+      <Card className="shadow-card space-y-3 p-4">
+        <p className="flex items-center gap-1.5 text-sm font-semibold">
+          <BedDouble className="size-4 text-primary" />
+          Add room &amp; price
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="rt">Room type</Label>
+          <Input
+            id="rt"
+            value={roomType}
+            onChange={(e) => setRoomType(e.target.value)}
+            placeholder="Deluxe double"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="rp">Price / night (ETB)</Label>
+            <Input
+              id="rp"
+              type="number"
+              inputMode="numeric"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="rc">Capacity (guests)</Label>
+            <Input
+              id="rc"
+              type="number"
+              inputMode="numeric"
+              value={capacity}
+              onChange={(e) => setCapacity(e.target.value)}
+            />
+          </div>
+        </div>
+        <Button
+          className="w-full"
+          disabled={!roomType || !price || add.isPending}
+          onClick={() => add.mutate()}
+        >
+          <Plus className="mr-2 size-4" />
+          Add room
+        </Button>
+      </Card>
+
+      {(rooms.data ?? []).length === 0 ? (
+        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
+          No rooms listed yet. Add your room types and prices so guests can book.
+        </Card>
+      ) : (
+        <>
+          <p className="px-1 text-xs text-muted-foreground">
+            {(rooms.data ?? []).length} room types · total capacity {totalCapacity} guests
+          </p>
+          {(rooms.data ?? []).map((r) => (
+            <Card key={r.id} className="shadow-card flex items-center justify-between p-4">
+              <div>
+                <p className="text-sm font-semibold">{r.room_type}</p>
+                <p className="text-xs text-muted-foreground">Up to {r.capacity} guests</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <p className="text-sm font-bold">{formatETB(r.price)}</p>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label={`Remove ${r.room_type}`}
+                  onClick={() => remove.mutate(r.id)}
+                >
+                  <Trash2 className="size-4 text-destructive" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+export function ShowcaseManager({
+  hotelId,
+  premiumActive = false,
+}: {
+  hotelId: string;
+  premiumActive?: boolean;
+}) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const [kind, setKind] = useState<"photo" | "video">("photo");
+  const [url, setUrl] = useState("");
+  const [caption, setCaption] = useState("");
+
+  const media = useQuery({
+    queryKey: ["hotel-media", hotelId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("hotel_media")
+        .select("*")
+        .eq("hotel_id", hotelId)
+        .order("sort_order")
+        .order("created_at");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const add = useMutation({
+    mutationFn: async () => {
+      if (!premiumActive) {
+        throw new Error("Monthly subscription required to post photos and videos");
+      }
+      const { error } = await supabase
+        .from("hotel_media")
+        .insert({ hotel_id: hotelId, kind, url, caption, moderation_status: "pending" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Uploaded. Waiting for Moybirr approval before it is public.");
+      setUrl("");
+      setCaption("");
+      void qc.invalidateQueries({ queryKey: ["hotel-media", hotelId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("hotel_media").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["hotel-media", hotelId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="w-full" disabled={!premiumActive}>
-          <Plus className="mr-2 size-4" />
-          {premiumActive ? "Post a vacancy (200 ETB)" : "Subscribe to premium to post jobs"}
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Post a vacancy</DialogTitle>
-          <DialogDescription>
-            200 ETB is deducted from your wallet. The vacancy is visible to all staff accounts.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="jt">Job title</Label>
-            <Input
-              id="jt"
-              placeholder="Senior waiter"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+    <div className="space-y-3">
+      <Card className="shadow-card space-y-3 p-4">
+        <p className="text-sm font-semibold">Advertise your best service</p>
+        <p className="text-xs text-muted-foreground">
+          Add photos and videos of your rooms, restaurant and spa. Guests see them on your hotel
+          page while your monthly plan is active.
+        </p>
+
+        {!premiumActive ? (
+          <div className="rounded-xl border border-dashed border-border bg-muted/50 p-4 text-center">
+            <p className="text-sm font-medium">Subscription required</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Pay the monthly listing plan (500 ETB) to post photos and videos that promote your
+              hotel.
+            </p>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="jd">Description</Label>
-            <Textarea
-              id="jd"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+        ) : (
+          <>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={kind === "photo" ? "default" : "outline"}
+                className="flex-1"
+                onClick={() => setKind("photo")}
+              >
+                <ImageIcon className="mr-2 size-4" />
+                Photo
+              </Button>
+              <Button
+                size="sm"
+                variant={kind === "video" ? "default" : "outline"}
+                className="flex-1"
+                onClick={() => setKind("video")}
+              >
+                <Video className="mr-2 size-4" />
+                Video
+              </Button>
+            </div>
             <div className="space-y-1.5">
-              <Label htmlFor="jl">Location</Label>
+              <Label htmlFor="mu">{kind === "photo" ? "Photo" : "Video (mp4)"}</Label>
+              {user ? (
+                <UploadButton
+                  userId={user.id}
+                  accept={kind === "photo" ? "image/*" : "video/*"}
+                  label={kind === "photo" ? "Upload photo" : "Upload video"}
+                  onUploaded={setUrl}
+                />
+              ) : null}
               <Input
-                id="jl"
-                placeholder="Addis Ababa"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
+                id="mu"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="…or paste a URL"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="js">Salary (ETB)</Label>
+              <Label htmlFor="mc">Caption</Label>
               <Input
-                id="js"
-                type="number"
-                inputMode="numeric"
-                value={salary}
-                onChange={(e) => setSalary(e.target.value)}
+                id="mc"
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Rooftop restaurant with city view"
               />
             </div>
-          </div>
-          <Button
-            className="w-full"
-            disabled={!title || !location || post.isPending}
-            onClick={() => post.mutate()}
-          >
-            Pay 200 ETB & publish
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+            <Button className="w-full" disabled={!url || add.isPending} onClick={() => add.mutate()}>
+              <Plus className="mr-2 size-4" />
+              Add to showcase
+            </Button>
+          </>
+        )}
+      </Card>
+
+      {(media.data ?? []).length === 0 ? (
+        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
+          Nothing in your showcase yet.
+        </Card>
+      ) : (
+        (media.data ?? []).map((m) => (
+          <Card key={m.id} className="shadow-card overflow-hidden p-0">
+            {m.kind === "video" ? (
+              <MediaVideo src={m.url} className="h-44 w-full bg-muted object-cover" />
+            ) : (
+              <MediaImg
+                src={m.url}
+                alt={m.caption ?? "Hotel service"}
+                className="h-44 w-full object-cover"
+              />
+            )}
+            <div className="flex items-center justify-between gap-2 p-3">
+              <div>
+                <Badge variant="secondary" className="capitalize">
+                  {m.kind}
+                </Badge>
+                <p className="mt-1 text-xs text-muted-foreground">{m.caption}</p>
+                <Badge
+                  variant={
+                    m.moderation_status === "approved"
+                      ? "secondary"
+                      : m.moderation_status === "rejected"
+                        ? "destructive"
+                        : "outline"
+                  }
+                  className="mt-1 capitalize"
+                >
+                  {m.moderation_status || "pending"}
+                </Badge>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Remove media"
+                onClick={() => remove.mutate(m.id)}
+              >
+                <Trash2 className="size-4 text-destructive" />
+              </Button>
+            </div>
+          </Card>
+        ))
+      )}
+    </div>
   );
 }
-                                   
