@@ -9,7 +9,6 @@ import { AppHeader, AppShell, RequireAuth } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { TipQr } from "@/components/TipQr";
 
 export const Route = createFileRoute("/staff")({
   head: () => ({
@@ -49,7 +48,7 @@ function StaffPage() {
       const { data, error } = await supabase
         .from("staff_profiles")
         .select(
-          "id,position,city,rating,rating_count,lat,lng,hotel_id, profiles:user_id(full_name,phone,moybirr_id), hotels:hotel_id(name)",
+          "id,position,city,rating,rating_count,lat,lng, profiles:user_id(full_name,phone), hotels:hotel_id(name)",
         )
         .order("rating", { ascending: false });
       if (error) throw error;
@@ -74,6 +73,16 @@ function StaffPage() {
       <AppHeader title={t("staff")} subtitle="Rated by real guests" />
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
+        <Link to="/best-staff" className="block">
+          <Card className="shadow-card flex items-center justify-between p-4">
+            <div>
+              <p className="text-sm font-semibold">Best staff this week</p>
+              <p className="text-xs text-muted-foreground">Top rated workers and their hotels</p>
+            </div>
+            <Star className="size-5 fill-primary text-primary" />
+          </Card>
+        </Link>
+
         <Card className="shadow-card space-y-3 p-4">
           <Input
             placeholder="Filter by city (Addis Ababa, Hawassa…)"
@@ -126,45 +135,34 @@ function StaffPage() {
           </Card>
         ) : (
           list.map((s) => {
-            const p = s.profiles as { full_name?: string; moybirr_id?: string } | null;
+            const p = s.profiles as { full_name?: string } | null;
             const h = s.hotels as { name?: string } | null;
             const name = p?.full_name || "Staff member";
             return (
-              <Card key={s.id} className="shadow-card space-y-3 p-4">
-                <div className="flex items-center gap-3">
-                  <Avatar className="size-11">
-                    <AvatarFallback className="bg-accent text-accent-foreground">
-                      {name.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{name}</p>
-                    {p?.moybirr_id ? (
-                      <p className="text-[11px] font-bold text-primary">{p.moybirr_id}</p>
-                    ) : null}
-                    <p className="truncate text-xs capitalize text-muted-foreground">
-                      {s.position} {h?.name ? `· ${h.name}` : ""}
-                    </p>
-                    <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                      <MapPin className="size-3" />
-                      {s.city}
-                      {s.dist != null ? ` · ${formatDistance(s.dist)} away` : ""}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="flex items-center justify-end gap-1 text-sm font-bold">
-                      <Star className="size-4 fill-primary text-primary" />
-                      {Number(s.rating).toFixed(1)}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">{s.rating_count} ratings</p>
-                  </div>
+              <Card key={s.id} className="shadow-card flex items-center gap-3 p-4">
+                <Avatar className="size-11">
+                  <AvatarFallback className="bg-accent text-accent-foreground">
+                    {name.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{name}</p>
+                  <p className="truncate text-xs capitalize text-muted-foreground">
+                    {s.position} {h?.name ? `· ${h.name}` : ""}
+                  </p>
+                  <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                    <MapPin className="size-3" />
+                    {s.city}
+                    {s.dist != null ? ` · ${formatDistance(s.dist)} away` : ""}
+                  </p>
                 </div>
-                <TipQr
-                  title={`Tip ${name}`}
-                  description={`Send a tip directly to ${name}'s Moybirr wallet`}
-                  hotelId={s.hotel_id ?? undefined}
-                  staffId={s.id}
-                />
+                <div className="shrink-0 text-right">
+                  <p className="flex items-center justify-end gap-1 text-sm font-bold">
+                    <Star className="size-4 fill-primary text-primary" />
+                    {Number(s.rating).toFixed(1)}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">{s.rating_count} ratings</p>
+                </div>
               </Card>
             );
           })
@@ -173,4 +171,3 @@ function StaffPage() {
     </>
   );
 }
-          
