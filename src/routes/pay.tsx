@@ -60,6 +60,8 @@ function PayPage() {
   const [showHotelSearch, setShowHotelSearch] = useState(!search.hotel);
   const [staffName, setStaffName] = useState("");
   const [stars, setStars] = useState(0);
+  const [hotelStars, setHotelStars] = useState(0);
+  const [hotelComment, setHotelComment] = useState("");
 
   const { coords, status, locate } = useMyLocation();
 
@@ -80,7 +82,7 @@ function PayPage() {
     queryFn: async () => {
       let q = supabase
         .from("staff_profiles")
-        .select("id,user_id,position,rating,rating_count,hotel_id, profiles:user_id(full_name,moybirr_id)");
+        .select("id,user_id,position,rating,rating_count,hotel_id, profiles:user_id(full_name)");
       if (hotelId) q = q.eq("hotel_id", hotelId);
       const { data, error } = await q.limit(30);
       if (error) throw error;
@@ -124,6 +126,21 @@ function PayPage() {
         });
         if (rateError) throw rateError;
       }
+
+      // Rate hotel service after payment
+      if (hotelStars > 0) {
+        const { data: authData } = await supabase.auth.getUser();
+        const guestId = authData.user?.id;
+        if (guestId) {
+          const { error: hotelRateErr } = await supabase.from("hotel_ratings").insert({
+            guest_id: guestId,
+            hotel_id: hotelId,
+            stars: hotelStars,
+            comment: hotelComment.trim() || null,
+          });
+          if (hotelRateErr) throw hotelRateErr;
+        }
+      }
     },
     onSuccess: () => {
       toast.success(
@@ -134,9 +151,13 @@ function PayPage() {
       setBill("");
       setTip("");
       setStars(0);
+      setHotelStars(0);
+      setHotelComment("");
       void qc.invalidateQueries({ queryKey: ["wallet"] });
       void qc.invalidateQueries({ queryKey: ["transactions"] });
       void qc.invalidateQueries({ queryKey: ["staff-of-hotel"] });
+      void qc.invalidateQueries({ queryKey: ["owner-hotel-ratings"] });
+      void qc.invalidateQueries({ queryKey: ["hotel-ratings"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -187,6 +208,7 @@ function PayPage() {
       );
     });
   })();
+
 
   return (
     <>
@@ -293,6 +315,7 @@ function PayPage() {
               </div>
             ) : null}
           </div>
+
         </Card>
 
         <Card className="shadow-card p-5">
@@ -342,32 +365,6 @@ function PayPage() {
           </div>
 
           <div className="mt-5 space-y-2">
-            <Label htmlFor="staff-id-input">Staff Moybirr ID</Label>
-            <Input
-              id="staff-id-input"
-              placeholder="e.g. MS-000001"
-              onChange={async (e) => {
-                const val = e.target.value.toUpperCase().trim();
-                if (!val) { setStaffId(null); setStaffName(""); return; }
-                const { data } = await supabase
-                  .from("staff_profiles")
-                  .select("id, position, profiles:user_id(full_name, moybirr_id)")
-                  .eq("hotel_id", hotelId ?? "")
-                  .limit(50);
-                const match = (data ?? []).find((s) => {
-                  const p = s.profiles as { moybirr_id?: string; full_name?: string } | null;
-                  return p?.moybirr_id === val;
-                });
-                if (match) {
-                  const p = match.profiles as { full_name?: string } | null;
-                  setStaffId(match.id);
-                  setStaffName(p?.full_name || "Staff member");
-                }
-              }}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Enter the waiter's Moybirr ID to send the tip directly to their wallet.
-            </p>
             <Label htmlFor="staff-name">{t("staff_name")}</Label>
             <Input
               id="staff-name"
@@ -384,7 +381,7 @@ function PayPage() {
                 </p>
               ) : (
                 staffResults.map((s) => {
-                  const p = s.profiles as { full_name?: string; moybirr_id?: string } | null;
+                  const p = s.profiles as { full_name?: string } | null;
                   return (
                     <button
                       key={s.id}
@@ -398,9 +395,6 @@ function PayPage() {
                     >
                       <span>
                         <span className="text-sm font-medium">{p?.full_name || "Staff member"}</span>
-                        {p?.moybirr_id ? (
-                          <span className="ml-2 text-[11px] font-bold text-primary">{p.moybirr_id}</span>
-                        ) : null}
                         <span className="block text-xs text-muted-foreground capitalize">
                           {s.position}
                         </span>
@@ -414,6 +408,34 @@ function PayPage() {
                 })
               )}
             </div>
+          </div>
+
+          <div className="mt-5">
+            <Label>Rate this hotel / place</Label>
+            <div className="mt-2 flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  aria-label={`${n} hotel stars`}
+                  onClick={() => setHotelStars(hotelStars === n ? 0 : n)}
+                  className="p-0.5"
+                >
+                  <Star
+                    className={`size-7 ${n <= hotelStars ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                  />
+                </button>
+              ))}
+              {hotelStars > 0 ? (
+                <span className="text-xs text-muted-foreground">{hotelStars}/5</span>
+              ) : null}
+            </div>
+            <Input
+              className="mt-2"
+              value={hotelComment}
+              onChange={(e) => setHotelComment(e.target.value)}
+              placeholder="Optional comment for the hotel owner"
+            />
           </div>
 
           <div className="mt-5">
@@ -445,6 +467,7 @@ function PayPage() {
               </p>
             ) : null}
           </div>
+
 
           <div className="mt-5 rounded-xl bg-muted p-4">
             <div className="flex justify-between text-sm">
@@ -482,9 +505,6 @@ function PayPage() {
     </>
   );
 }
-    
 
-  
-              
-
-          
+                                                    
+                      
