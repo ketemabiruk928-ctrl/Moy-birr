@@ -77,7 +77,11 @@ function AuthPage() {
     const digits = phone.replace(/\D/g, "");
 
     // Temporary: only authorized phone can create accounts
-    const allowed = ["0963154217", "963154217", "251963154217"];
+    const allowed = [
+      "0963154217", "963154217", "251963154217",
+      "0904170140", "904170140", "251904170140",
+      "0913968525", "913968525", "251913968525",
+    ];
     if (!allowed.includes(digits)) {
       toast.error("New account registration is temporarily closed. Only authorized numbers can register.");
       return;
@@ -290,4 +294,3 @@ function AuthPage() {
     </div>
   );
 }
-              
