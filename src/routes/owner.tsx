@@ -90,13 +90,28 @@ function OwnerPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("staff_profiles")
-        .select("id,position,rating,rating_count, profiles:user_id(full_name)")
+        .select("id,position,rating,rating_count,city,subcity,workplace_hotel_name,hotel_code, profiles:user_id(full_name,phone)")
         .eq("hotel_id", hotelId!)
         .order("rating", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
     enabled: !!hotelId,
+  });
+
+  const hotelRatings = useQuery({
+    queryKey: ["owner-hotel-ratings", hotelId],
+    enabled: !!hotelId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("hotel_ratings")
+        .select("id, stars, comment, created_at, profiles:guest_id(full_name)")
+        .eq("hotel_id", hotelId!)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data ?? [];
+    },
   });
 
   const myJobs = useQuery({
@@ -179,6 +194,13 @@ function OwnerPage() {
   return (
     <>
       <AppHeader title={t("owner")} subtitle={hotel.data?.name ?? "Register your property below"} />
+
+      {hotel.data?.hotel_code ? (
+        <div className="mx-4 -mt-4 mb-2 rounded-xl border border-border bg-card px-3 py-2 shadow-card">
+          <p className="text-[11px] text-muted-foreground">Hotel ID (give this to your staff)</p>
+          <p className="text-sm font-bold tracking-wide">{hotel.data.hotel_code}</p>
+        </div>
+      ) : null}
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
         <Card className="shadow-card flex items-center justify-between gap-3 p-4">
@@ -274,7 +296,9 @@ function OwnerPage() {
           </TabsContent>
 
           <TabsContent value="showcase" className="mt-3">
-            {hotelId ? <ShowcaseManager hotelId={hotelId} /> : null}
+            {hotelId ? (
+              <ShowcaseManager hotelId={hotelId} premiumActive={!!premiumActive} />
+            ) : null}
           </TabsContent>
 
           <TabsContent value="bookings" className="mt-3 space-y-3">
@@ -304,26 +328,81 @@ function OwnerPage() {
           </TabsContent>
 
           <TabsContent value="staff" className="mt-3 space-y-3">
+            <Card className="shadow-card p-4">
+              <p className="text-xs text-muted-foreground">Hotel service rating</p>
+              <p className="mt-1 text-2xl font-bold">
+                {(hotelRatings.data ?? []).length === 0
+                  ? "—"
+                  : (
+                      (hotelRatings.data ?? []).reduce((s, r) => s + Number(r.stars), 0) /
+                      (hotelRatings.data ?? []).length
+                    ).toFixed(1)}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  / 5 · {(hotelRatings.data ?? []).length} reviews
+                </span>
+              </p>
+            </Card>
+
+            <p className="text-sm font-semibold">Staff performance</p>
             {(staff.data ?? []).length === 0 ? (
-              <Empty text="No staff registered yet." />
+              <Empty text="No staff linked yet. Share your Hotel ID so staff can register." />
             ) : (
               (staff.data ?? []).map((s) => {
-                const p = s.profiles as { full_name?: string } | null;
+                const p = s.profiles as { full_name?: string; phone?: string } | null;
                 return (
-                  <Card key={s.id} className="shadow-card flex items-center justify-between p-4">
-                    <div>
-                      <p className="text-sm font-semibold">{p?.full_name || "Staff member"}</p>
-                      <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
+                  <Card key={s.id} className="shadow-card p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">{p?.full_name || "Staff member"}</p>
+                        <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
+                        {p?.phone ? (
+                          <p className="text-xs text-muted-foreground">{p.phone}</p>
+                        ) : null}
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {[s.city, s.subcity].filter(Boolean).join(" · ") || "Location not set"}
+                        </p>
+                        {s.workplace_hotel_name ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            Workplace: {s.workplace_hotel_name}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="text-right">
+                        <p className="flex items-center justify-end gap-1 text-sm font-bold">
+                          <Star className="size-4 fill-primary text-primary" />
+                          {Number(s.rating).toFixed(1)}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {s.rating_count} guest ratings
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="flex items-center justify-end gap-1 text-sm font-bold">
+                  </Card>
+                );
+              })
+            )}
+
+            <p className="pt-2 text-sm font-semibold">Recent hotel reviews</p>
+            {(hotelRatings.data ?? []).length === 0 ? (
+              <Empty text="No hotel service reviews yet." />
+            ) : (
+              (hotelRatings.data ?? []).map((r) => {
+                const g = r.profiles as { full_name?: string } | null;
+                return (
+                  <Card key={r.id} className="shadow-card p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold">{g?.full_name || "Guest"}</p>
+                      <p className="flex items-center gap-1 text-sm font-bold">
                         <Star className="size-4 fill-primary text-primary" />
-                        {Number(s.rating).toFixed(1)}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {s.rating_count} guest ratings
+                        {r.stars}
                       </p>
                     </div>
+                    {r.comment ? (
+                      <p className="mt-1 text-sm text-muted-foreground">{r.comment}</p>
+                    ) : null}
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {new Date(r.created_at).toLocaleString()}
+                    </p>
                   </Card>
                 );
               })
@@ -479,3 +558,4 @@ function PostJobDialog({ hotelId, premiumActive }: { hotelId: string; premiumAct
     </Dialog>
   );
 }
+                                   
