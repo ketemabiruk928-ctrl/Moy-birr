@@ -98,18 +98,33 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="hc">City</Label>
-          <Input id="hc" value={city} onChange={(e) => setCity(e.target.value)} />
+          <Input id="hc" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Addis Ababa" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="hp">From price (ETB)</Label>
-          <Input
-            id="hp"
-            type="number"
-            inputMode="numeric"
-            value={priceFrom}
-            onChange={(e) => setPriceFrom(e.target.value)}
-          />
+          <Label htmlFor="hs">Subcity</Label>
+          <Input id="hs" value={subcity} onChange={(e) => setSubcity(e.target.value)} placeholder="Bole" />
         </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="hl">Location / address</Label>
+        <Input
+          id="hl"
+          value={locationText}
+          onChange={(e) => setLocationText(e.target.value)}
+          placeholder="Near Bole Airport, main road"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="hp">From price (ETB)</Label>
+        <Input
+          id="hp"
+          type="number"
+          inputMode="numeric"
+          value={priceFrom}
+          onChange={(e) => setPriceFrom(e.target.value)}
+        />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="hi">Cover photo</Label>
@@ -360,11 +375,11 @@ export function ShowcaseManager({
       }
       const { error } = await supabase
         .from("hotel_media")
-        .insert({ hotel_id: hotelId, kind, url, caption });
+        .insert({ hotel_id: hotelId, kind, url, caption, moderation_status: "pending" });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Added to your showcase");
+      toast.success("Uploaded. Waiting for Moybirr approval before it is public.");
       setUrl("");
       setCaption("");
       void qc.invalidateQueries({ queryKey: ["hotel-media", hotelId] });
@@ -478,6 +493,18 @@ export function ShowcaseManager({
                   {m.kind}
                 </Badge>
                 <p className="mt-1 text-xs text-muted-foreground">{m.caption}</p>
+                <Badge
+                  variant={
+                    m.moderation_status === "approved"
+                      ? "secondary"
+                      : m.moderation_status === "rejected"
+                        ? "destructive"
+                        : "outline"
+                  }
+                  className="mt-1 capitalize"
+                >
+                  {m.moderation_status || "pending"}
+                </Badge>
               </div>
               <Button
                 size="icon"
@@ -494,4 +521,3 @@ export function ShowcaseManager({
     </div>
   );
 }
-     
