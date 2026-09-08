@@ -92,6 +92,37 @@ function AdminPage() {
     },
   });
 
+  const pendingMedia = useQuery({
+    queryKey: ["admin-pending-media"],
+    enabled: isAllowedAdmin,
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("hotel_media")
+        .select("id, kind, url, caption, moderation_status, created_at, hotels:hotel_id(name)")
+        .eq("moderation_status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const moderateMedia = useMutation({
+    mutationFn: async (payload: { id: string; status: "approved" | "rejected" }) => {
+      const { error } = await supabase
+        .from("hotel_media")
+        .update({ moderation_status: payload.status })
+        .eq("id", payload.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Media updated");
+      void qc.invalidateQueries({ queryKey: ["admin-pending-media"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const blockMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.rpc("admin_block_user", {
@@ -292,6 +323,52 @@ function AdminPage() {
         </Card>
 
         <Card className="shadow-card space-y-3 p-4">
+          <h2 className="text-sm font-semibold">Pending media (approve / reject)</h2>
+          <p className="text-xs text-muted-foreground">
+            Only hotel-related content should be approved. Reject crime, porn, assault, or misleading posts.
+          </p>
+          {(pendingMedia.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No pending posts.</p>
+          ) : (
+            (pendingMedia.data ?? []).map((m) => {
+              const hotel = m.hotels as { name?: string } | null;
+              return (
+                <div key={m.id} className="space-y-2 rounded-xl border border-border p-3">
+                  <p className="text-sm font-semibold">{hotel?.name || "Hotel"}</p>
+                  <p className="text-xs capitalize text-muted-foreground">{m.kind}</p>
+                  {m.caption ? <p className="text-xs">{m.caption}</p> : null}
+                  <a
+                    href={m.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-primary underline"
+                  >
+                    Open media
+                  </a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      size="sm"
+                      disabled={moderateMedia.isPending}
+                      onClick={() => moderateMedia.mutate({ id: m.id, status: "approved" })}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={moderateMedia.isPending}
+                      onClick={() => moderateMedia.mutate({ id: m.id, status: "rejected" })}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </Card>
+
+        <Card className="shadow-card space-y-3 p-4">
           <h2 className="text-sm font-semibold">Block / Unblock member</h2>
           <div className="space-y-1.5">
             <Label htmlFor="tid">Moybirr ID</Label>
@@ -376,7 +453,5 @@ function Stat({ label, value }: { label: string; value: number | string | undefi
     </div>
   );
 }
-
-              
 
       
