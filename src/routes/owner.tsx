@@ -17,10 +17,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { OwnerFeedbackInbox } from "@/components/OwnerFeedbackInbox";
-import { OwnerPerformance } from "@/components/OwnerPerformance";
-import { TeamChat } from "@/components/TeamChat";
-import { TeamMeetings } from "@/components/TeamMeetings";
 import {
   Dialog,
   DialogContent,
@@ -89,42 +85,18 @@ function OwnerPage() {
     enabled: !!hotelId,
   });
 
-  // owner_staff_list is used instead of a direct table read because it also
-  // returns people who are only *requesting* to join, and it checks that the
-  // caller really owns this hotel before returning phone numbers.
   const staff = useQuery({
     queryKey: ["owner-staff", hotelId],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("owner_staff_list", { _hotel_id: hotelId! });
+      const { data, error } = await supabase
+        .from("staff_profiles")
+        .select("*, profiles(full_name, phone)")
+        .eq("hotel_id", hotelId!);
       if (error) throw error;
       return data ?? [];
     },
     enabled: !!hotelId,
   });
-
-  const setStaffStatus = useMutation({
-    mutationFn: async (vars: { id: string; status: "active" | "rejected" | "removed" }) => {
-      const { error } = await supabase.rpc("set_staff_status", {
-        _staff_profile_id: vars.id,
-        _status: vars.status,
-      });
-      if (error) throw error;
-    },
-    onSuccess: (_d, vars) => {
-      toast.success(
-        vars.status === "active"
-          ? "Staff member approved"
-          : vars.status === "rejected"
-            ? "Request rejected"
-            : "Staff member removed",
-      );
-      void qc.invalidateQueries({ queryKey: ["owner-staff", hotelId] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const pendingStaff = (staff.data ?? []).filter((s) => s.employment_status === "pending");
-  const activeStaff = (staff.data ?? []).filter((s) => s.employment_status === "active");
 
   const hotelRatings = useQuery({
     queryKey: ["owner-hotel-ratings", hotelId],
@@ -281,7 +253,7 @@ function OwnerPage() {
             <Stat
               icon={<Users className="size-4 text-primary" />}
               label="Staff members"
-              value={String(activeStaff.length)}
+              value={String((staff.data ?? []).length)}
             />
           </div>
         ) : null}
@@ -300,18 +272,6 @@ function OwnerPage() {
             </TabsTrigger>
             <TabsTrigger value="staff" disabled={!hotelId}>
               Staff
-            </TabsTrigger>
-            <TabsTrigger value="team" disabled={!hotelId}>
-              Team chat
-            </TabsTrigger>
-            <TabsTrigger value="meetings" disabled={!hotelId}>
-              Meetings
-            </TabsTrigger>
-            <TabsTrigger value="feedback" disabled={!hotelId}>
-              Guest messages
-            </TabsTrigger>
-            <TabsTrigger value="performance" disabled={!hotelId}>
-              Performance
             </TabsTrigger>
             <TabsTrigger value="jobs" disabled={!hotelId}>
               Jobs
@@ -381,87 +341,19 @@ function OwnerPage() {
               </p>
             </Card>
 
-            {pendingStaff.length > 0 ? (
-              <>
-                <p className="text-sm font-semibold">
-                  Waiting for your approval ({pendingStaff.length})
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  These people entered your Hotel ID. They cannot receive tips at your property
-                  until you approve them.
-                </p>
-                {pendingStaff.map((s) => (
-                  <Card key={s.staff_profile_id} className="shadow-card border-primary/40 p-4">
-                    <p className="text-sm font-semibold">{s.full_name || "Staff member"}</p>
-                    <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {[s.phone, s.moybirr_id].filter(Boolean).join(" · ")}
-                    </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {[s.city, s.subcity].filter(Boolean).join(" · ") || "Location not set"}
-                    </p>
-                    <div className="mt-3 flex gap-2">
-                      <Button
-                        size="sm"
-                        disabled={setStaffStatus.isPending}
-                        onClick={() =>
-                          setStaffStatus.mutate({ id: s.staff_profile_id!, status: "active" })
-                        }
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={setStaffStatus.isPending}
-                        onClick={() =>
-                          setStaffStatus.mutate({ id: s.staff_profile_id!, status: "rejected" })
-                        }
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </>
-            ) : null}
-
-            <p className="pt-2 text-sm font-semibold">Staff performance</p>
-            {activeStaff.length === 0 ? (
-              <Empty text="No approved staff yet. Share your Hotel ID so staff can request to join." />
+            <p className="text-sm font-semibold">Staff members</p>
+            {(staff.data ?? []).length === 0 ? (
+              <Empty text="No staff yet. Share your Hotel ID so staff can request to join." />
             ) : (
-              activeStaff.map((s) => (
-                <Card key={s.staff_profile_id} className="shadow-card p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold">{s.full_name || "Staff member"}</p>
-                      <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
-                      {s.phone ? <p className="text-xs text-muted-foreground">{s.phone}</p> : null}
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {[s.city, s.subcity].filter(Boolean).join(" · ") || "Location not set"}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="flex items-center justify-end gap-1 text-sm font-bold">
-                        <Star className="size-4 fill-primary text-primary" />
-                        {Number(s.rating).toFixed(1)}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {s.rating_count} guest ratings
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="mt-1 h-7 px-2 text-[11px] text-destructive"
-                        disabled={setStaffStatus.isPending}
-                        onClick={() =>
-                          setStaffStatus.mutate({ id: s.staff_profile_id!, status: "removed" })
-                        }
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
+              (staff.data ?? []).map((s: any) => (
+                <Card key={s.id} className="shadow-card p-4">
+                  <p className="text-sm font-semibold">
+                    {s.profiles?.full_name || "Staff member"}
+                  </p>
+                  <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
+                  {s.profiles?.phone ? (
+                    <p className="text-xs text-muted-foreground">{s.profiles.phone}</p>
+                  ) : null}
                 </Card>
               ))
             )}
@@ -491,22 +383,6 @@ function OwnerPage() {
                 );
               })
             )}
-          </TabsContent>
-
-          <TabsContent value="team" className="mt-3">
-            {hotelId ? <TeamChat hotelId={hotelId} /> : null}
-          </TabsContent>
-
-          <TabsContent value="meetings" className="mt-3">
-            {hotelId ? <TeamMeetings hotelId={hotelId} canSchedule /> : null}
-          </TabsContent>
-
-          <TabsContent value="feedback" className="mt-3">
-            {hotelId ? <OwnerFeedbackInbox hotelId={hotelId} /> : null}
-          </TabsContent>
-
-          <TabsContent value="performance" className="mt-3">
-            {hotelId ? <OwnerPerformance hotelId={hotelId} /> : null}
           </TabsContent>
 
           <TabsContent value="jobs" className="mt-3 space-y-3">
