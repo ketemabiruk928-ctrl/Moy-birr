@@ -51,6 +51,20 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
+// Turn whatever shape the API returned into a string we can show a user.
+// The API might send { error: "text" } or { error: { message: "text" } }
+// or nothing at all — this handles every case.
+function errorText(json: unknown, fallback: string): string {
+  if (!json || typeof json !== "object") return fallback;
+  const raw = (json as { error?: unknown }).error;
+  if (typeof raw === "string" && raw.length > 0) return raw;
+  if (raw && typeof raw === "object" && "message" in raw) {
+    const m = (raw as { message?: unknown }).message;
+    if (typeof m === "string" && m.length > 0) return m;
+  }
+  return fallback;
+}
+
 const typeMeta: Record<string, { label: string; icon: typeof Send; tone: string }> = {
   deposit: { label: "Deposit", icon: ArrowDownLeft, tone: "text-success" },
   withdraw: { label: "Withdraw", icon: ArrowUpRight, tone: "text-destructive" },
@@ -225,10 +239,6 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
 
-  // Deposits no longer credit the wallet directly from the client - that was
-  // a self-serve "add free money" hole. This kicks off a real Chapa
-  // checkout; the wallet only gets credited after Chapa confirms payment via
-  // the server-side webhook (see /api/chapa/webhook).
   const m = useMutation({
     mutationFn: async () => {
       if (!session) throw new Error("Not signed in");
@@ -240,14 +250,15 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
         },
         body: JSON.stringify({ amount: Number(amount) }),
       });
-      const json = (await res.json()) as { checkoutUrl?: string; error?: string };
-      if (!res.ok || !json.checkoutUrl) throw new Error(json.error ?? "Could not start deposit");
-      return json.checkoutUrl;
+      const json = await res.json().catch(() => ({}));
+      const checkoutUrl = (json as { checkoutUrl?: string }).checkoutUrl;
+      if (!res.ok || !checkoutUrl) {
+        throw new Error(errorText(json, `Deposit failed (${res.status})`));
+      }
+      return checkoutUrl;
     },
     onSuccess: (checkoutUrl) => {
       setOpen(false);
-      // Hand off to Chapa's hosted checkout (Telebirr, CBE, cards, etc. all
-      // live there) - we never collect card/PIN details ourselves.
       window.location.href = checkoutUrl;
     },
     onError: (e: Error) => toast.error(e.message),
@@ -386,15 +397,15 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
       const res = await fetch("/api/chapa/banks", {
         headers: { Authorization: `Bearer ${session!.access_token}` },
       });
-      const json = (await res.json()) as { banks?: { code: string; name: string }[]; error?: string };
-      if (!res.ok || !json.banks) throw new Error(json.error ?? "Could not load banks");
-      return json.banks;
+      const json = await res.json().catch(() => ({}));
+      const banks = (json as { banks?: { code: string; name: string }[] }).banks;
+      if (!res.ok || !banks) {
+        throw new Error(errorText(json, `Could not load banks (${res.status})`));
+      }
+      return banks;
     },
   });
 
-  // Withdrawals now reserve the money and send a real transfer request to
-  // Chapa instead of just decrementing a number and hoping. If the transfer
-  // fails, the webhook refunds the wallet automatically.
   const m = useMutation({
     mutationFn: async () => {
       if (!session) throw new Error("Not signed in");
@@ -411,8 +422,8 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
           account_name: accountName,
         }),
       });
-      const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Withdrawal failed");
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(errorText(json, `Withdrawal failed (${res.status})`));
     },
     onSuccess: () => {
       toast.success("Withdrawal sent — it'll land in a few minutes");
@@ -459,6 +470,11 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
                 </option>
               ))}
             </select>
+            {banksQuery.isError ? (
+              <p className="text-xs text-destructive">
+                {(banksQuery.error as Error).message}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="wacct">Account number</Label>
