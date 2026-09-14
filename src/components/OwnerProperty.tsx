@@ -17,18 +17,40 @@ type Hotel = {
   id: string;
   name: string;
   city: string;
+  subcity?: string | null;
+  location_text?: string | null;
   description: string | null;
   photo_url: string | null;
   price_from: number;
   trade_license_url?: string | null;
   total_beds?: number | null;
+  venue_type?: string | null;
+  has_rooms?: boolean | null;
 };
+
+const VENUE_TYPES = [
+  { value: "hotel", label: "Hotel" },
+  { value: "guesthouse", label: "Guesthouse" },
+  { value: "resort", label: "Resort" },
+  { value: "lodge", label: "Lodge" },
+  { value: "restaurant", label: "Restaurant" },
+  { value: "cafe", label: "Cafe" },
+  { value: "bar", label: "Bar" },
+  { value: "lounge", label: "Lounge" },
+];
+
+// Venue types that never take room bookings.
+const ROOMLESS = new Set(["restaurant", "cafe", "bar", "lounge"]);
 
 export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
   const qc = useQueryClient();
   const { user } = useAuth();
+
   const [name, setName] = useState(hotel?.name ?? "");
   const [city, setCity] = useState(hotel?.city ?? "Addis Ababa");
+  const [subcity, setSubcity] = useState(hotel?.subcity ?? "");
+  const [locationText, setLocationText] = useState(hotel?.location_text ?? "");
+  const [venueType, setVenueType] = useState(hotel?.venue_type ?? "hotel");
   const [description, setDescription] = useState(hotel?.description ?? "");
   const [photoUrl, setPhotoUrl] = useState(hotel?.photo_url ?? "");
   const [priceFrom, setPriceFrom] = useState(hotel ? String(hotel.price_from) : "");
@@ -41,12 +63,17 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
     if (!hotel) return;
     setName(hotel.name);
     setCity(hotel.city);
+    setSubcity(hotel.subcity ?? "");
+    setLocationText(hotel.location_text ?? "");
+    setVenueType(hotel.venue_type ?? "hotel");
     setDescription(hotel.description ?? "");
     setPhotoUrl(hotel.photo_url ?? "");
     setPriceFrom(String(hotel.price_from));
     setTradeLicenseUrl(hotel.trade_license_url ?? "");
     setTotalBeds(hotel.total_beds != null ? String(hotel.total_beds) : "");
   }, [hotel]);
+
+  const isRoomless = ROOMLESS.has(venueType);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -57,26 +84,13 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
         _photo_url: photoUrl,
         _price_from: priceFrom ? Number(priceFrom) : 0,
         _trade_license_url: tradeLicenseUrl || null,
+        _subcity: subcity || null,
+        _location_text: locationText || null,
+        _venue_type: venueType,
+        _has_rooms: !isRoomless,
+        _total_beds: isRoomless ? null : totalBeds ? Number(totalBeds) : null,
       });
       if (error) throw error;
-
-      // Save optional beds after hotel exists
-      let hotelId = hotel?.id;
-      if (!hotelId && user?.id) {
-        const { data: created } = await supabase
-          .from("hotels")
-          .select("id")
-          .eq("owner_id", user.id)
-          .maybeSingle();
-        hotelId = created?.id;
-      }
-      if (hotelId) {
-        const { error: bedsErr } = await supabase
-          .from("hotels")
-          .update({ total_beds: totalBeds ? Number(totalBeds) : null })
-          .eq("id", hotelId);
-        if (bedsErr) throw bedsErr;
-      }
     },
     onSuccess: () => {
       toast.success(hotel ? "Property updated" : "Property registered");
@@ -91,18 +105,56 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
       <p className="text-sm font-semibold">
         {hotel ? "Property details" : "Register your property"}
       </p>
+
       <div className="space-y-1.5">
-        <Label htmlFor="hn">Hotel name</Label>
-        <Input id="hn" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sheba Grand Hotel" />
+        <Label htmlFor="hn">Name</Label>
+        <Input
+          id="hn"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Sheba Grand Hotel"
+        />
       </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="hv">Venue type</Label>
+        <select
+          id="hv"
+          value={venueType}
+          onChange={(e) => setVenueType(e.target.value)}
+          className="w-full rounded-md border border-border bg-background p-2 text-sm"
+        >
+          {VENUE_TYPES.map((v) => (
+            <option key={v.value} value={v.value}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+        {isRoomless ? (
+          <p className="text-[11px] text-muted-foreground">
+            {VENUE_TYPES.find((v) => v.value === venueType)?.label}s take no room bookings.
+          </p>
+        ) : null}
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="hc">City</Label>
-          <Input id="hc" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Addis Ababa" />
+          <Input
+            id="hc"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            placeholder="Addis Ababa"
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="hs">Subcity</Label>
-          <Input id="hs" value={subcity} onChange={(e) => setSubcity(e.target.value)} placeholder="Bole" />
+          <Input
+            id="hs"
+            value={subcity}
+            onChange={(e) => setSubcity(e.target.value)}
+            placeholder="Bole"
+          />
         </div>
       </div>
 
@@ -126,10 +178,32 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
           onChange={(e) => setPriceFrom(e.target.value)}
         />
       </div>
+
+      {!isRoomless ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="beds">
+            Total beds{" "}
+            <span className="font-normal text-muted-foreground">(optional)</span>
+          </Label>
+          <Input
+            id="beds"
+            type="number"
+            inputMode="numeric"
+            value={totalBeds}
+            onChange={(e) => setTotalBeds(e.target.value)}
+            placeholder="e.g. 40"
+          />
+        </div>
+      ) : null}
+
       <div className="space-y-1.5">
         <Label htmlFor="hi">Cover photo</Label>
         {photoUrl ? (
-          <MediaImg src={photoUrl} alt="Cover photo" className="h-36 w-full rounded-xl object-cover" />
+          <MediaImg
+            src={photoUrl}
+            alt="Cover photo"
+            className="h-36 w-full rounded-xl object-cover"
+          />
         ) : null}
         {user ? (
           <UploadButton userId={user.id} label="Upload cover photo" onUploaded={setPhotoUrl} />
@@ -141,22 +215,7 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
           placeholder="…or paste an image URL"
         />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="beds">
-          Total beds <span className="font-normal text-muted-foreground">(optional)</span>
-        </Label>
-        <p className="text-xs text-muted-foreground">
-          For hotels with beds. Leave empty for restaurants.
-        </p>
-        <Input
-          id="beds"
-          type="number"
-          inputMode="numeric"
-          value={totalBeds}
-          onChange={(e) => setTotalBeds(e.target.value)}
-          placeholder="e.g. 40"
-        />
-      </div>
+
       <div className="space-y-1.5">
         <Label htmlFor="hd">Description</Label>
         <Textarea
@@ -166,13 +225,12 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
           placeholder="Rooftop restaurant, spa, free airport shuttle…"
         />
       </div>
+
       <div className="space-y-1.5">
         <Label htmlFor="tl">
-          Trade licence <span className="font-normal text-muted-foreground">(optional)</span>
+          Trade licence{" "}
+          <span className="font-normal text-muted-foreground">(optional)</span>
         </Label>
-        <p className="text-xs text-muted-foreground">
-          Attach your trade licence if you want. This is not mandatory.
-        </p>
         {tradeLicenseUrl ? (
           <a
             href={tradeLicenseUrl}
@@ -198,7 +256,12 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
           placeholder="…or paste a document / image URL"
         />
       </div>
-      <Button className="w-full" disabled={!name || save.isPending} onClick={() => save.mutate()}>
+
+      <Button
+        className="w-full"
+        disabled={!name || save.isPending}
+        onClick={() => save.mutate()}
+      >
         {hotel ? "Save changes" : "Register property"}
       </Button>
     </Card>
@@ -463,7 +526,11 @@ export function ShowcaseManager({
                 placeholder="Rooftop restaurant with city view"
               />
             </div>
-            <Button className="w-full" disabled={!url || add.isPending} onClick={() => add.mutate()}>
+            <Button
+              className="w-full"
+              disabled={!url || add.isPending}
+              onClick={() => add.mutate()}
+            >
               <Plus className="mr-2 size-4" />
               Add to showcase
             </Button>
