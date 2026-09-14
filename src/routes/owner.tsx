@@ -3,7 +3,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
-  TrendingUp, Users, BedDouble, Crown, Star, Plus, AlertTriangle, Loader2,
+  TrendingUp,
+  Users,
+  BedDouble,
+  Crown,
+  Star,
+  Plus,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 
 import { PropertyForm, RoomsManager, ShowcaseManager } from "@/components/OwnerProperty";
@@ -25,7 +32,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/owner")({
@@ -58,9 +70,7 @@ function OwnerPage() {
   const { user, role } = useAuth();
   const qc = useQueryClient();
 
-  // ─── The owner's hotel ───────────────────────────────────────────────
-  // Uses .maybeSingle() but now surfaces the error, so a broken query no
-  // longer looks identical to "you haven't registered a hotel yet".
+  // ─── Hotel ─────────────────────────────────────────────────────────
   const hotel = useQuery({
     queryKey: ["my-hotel", user?.id],
     enabled: !!user,
@@ -77,10 +87,7 @@ function OwnerPage() {
 
   const hotelId = hotel.data?.id ?? null;
 
-  // ─── Plan gate, read from the DB ─────────────────────────────────────
-  // owner_plan_active() is the single source of truth (it's what RLS uses).
-  // Previously the UI computed this a second time from subscriptions.end_date
-  // and could disagree with what the DB enforced.
+  // ─── Plan (source of truth = DB function, not subscriptions table) ──
   const plan = useQuery({
     queryKey: ["owner-plan", hotelId],
     enabled: !!hotelId,
@@ -94,7 +101,7 @@ function OwnerPage() {
   });
   const premiumActive = plan.data === true;
 
-  // ─── Bookings ────────────────────────────────────────────────────────
+  // ─── Bookings ──────────────────────────────────────────────────────
   const bookings = useQuery({
     queryKey: ["owner-bookings", hotelId],
     enabled: !!hotelId,
@@ -109,7 +116,7 @@ function OwnerPage() {
     },
   });
 
-  // ─── Staff (incl. pending), via RPC that also enforces ownership ─────
+  // ─── Staff ─────────────────────────────────────────────────────────
   const staff = useQuery({
     queryKey: ["owner-staff", hotelId],
     enabled: !!hotelId,
@@ -149,7 +156,7 @@ function OwnerPage() {
   const pendingStaff = (staff.data ?? []).filter((s) => s.employment_status === "pending");
   const activeStaff = (staff.data ?? []).filter((s) => s.employment_status === "active");
 
-  // ─── Hotel reviews ───────────────────────────────────────────────────
+  // ─── Hotel reviews ─────────────────────────────────────────────────
   const hotelRatings = useQuery({
     queryKey: ["owner-hotel-ratings", hotelId],
     enabled: !!hotelId,
@@ -165,7 +172,7 @@ function OwnerPage() {
     },
   });
 
-  // ─── Jobs ────────────────────────────────────────────────────────────
+  // ─── Jobs ──────────────────────────────────────────────────────────
   const myJobs = useQuery({
     queryKey: ["owner-jobs", hotelId],
     enabled: !!hotelId,
@@ -180,11 +187,7 @@ function OwnerPage() {
     },
   });
 
-  // ─── Performance summary (replaces the broken "all tips" query) ──────
-  // The old code did: supabase.from("transactions").select("amount")
-  //   .eq("type","tip")
-  // with NO hotel filter — so it summed every tip on the platform.
-  // owner_performance_summary() computes this correctly per hotel.
+  // ─── Performance (replaces the broken all-tips query) ──────────────
   const performance = useQuery({
     queryKey: ["owner-summary", hotelId],
     enabled: !!hotelId,
@@ -211,7 +214,7 @@ function OwnerPage() {
     },
   });
 
-  // ─── Subscribe ───────────────────────────────────────────────────────
+  // ─── Subscribe ─────────────────────────────────────────────────────
   const subscribe = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.rpc("subscribe_premium");
@@ -219,8 +222,6 @@ function OwnerPage() {
     },
     onSuccess: () => {
       toast.success("Premium active for 30 days");
-      // Invalidate the plan query too — owner_plan_active() reads the
-      // subscriptions table and would otherwise look stale until refresh.
       void qc.invalidateQueries({ queryKey: ["owner-plan"] });
       void qc.invalidateQueries({ queryKey: ["my-hotel"] });
       void qc.invalidateQueries({ queryKey: ["owner-summary"] });
@@ -229,10 +230,7 @@ function OwnerPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // ─── Wait for role to resolve, then gate ────────────────────────────
-  // The old check was `role !== "owner"` inside the render. If useAuth
-  // hasn't finished resolving on first paint, role is null and a real
-  // owner sees the "owners only" card. This handles the transient state.
+  // ─── Role gate (waits for useAuth to finish resolving) ─────────────
   if (role === null) {
     return (
       <>
@@ -259,7 +257,7 @@ function OwnerPage() {
     );
   }
 
-  // ─── Derive header stats from the summary RPC, not from raw sums ────
+  // ─── Derived stats ─────────────────────────────────────────────────
   const confirmed = (bookings.data ?? []).filter((b) => b.status === "confirmed");
   const roomRevenue = confirmed.reduce((s, b) => s + Number(b.total), 0);
   const occupancy = confirmed.filter((b) => new Date(b.check_out) >= new Date()).length;
@@ -282,7 +280,7 @@ function OwnerPage() {
       ) : null}
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
-        {/* ── Plan card ── */}
+        {/* Plan card */}
         <Card className="shadow-card flex items-center justify-between gap-3 p-4">
           <div>
             <p className="flex items-center gap-1.5 text-sm font-semibold">
@@ -317,7 +315,7 @@ function OwnerPage() {
           </Card>
         ) : null}
 
-        {/* ── Stat tiles ── */}
+        {/* Stats */}
         {hotelId ? (
           <div className="grid grid-cols-2 gap-3">
             <Stat
@@ -343,7 +341,7 @@ function OwnerPage() {
           </div>
         ) : null}
 
-        {/* ── Tabs ── */}
+        {/* Tabs */}
         <Tabs defaultValue={hotelId ? "bookings" : "property"}>
           <TabsList className="w-full justify-start overflow-x-auto">
             <TabsTrigger value="property">Property</TabsTrigger>
