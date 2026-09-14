@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Wallet, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizePhone, phoneToEmail, useAuth, type Role } from "@/lib/auth";
 import { useLang } from "@/lib/i18n";
@@ -163,9 +163,11 @@ function AuthPage() {
     <div className="min-h-screen bg-background">
       <div className="bg-gradient-primary px-6 pt-14 pb-12 text-primary-foreground">
         <div className="mx-auto w-full max-w-lg">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-primary-foreground/15">
-            <Wallet className="size-7" />
-          </div>
+          <img
+            src="/logo.png"
+            alt="Moybirr"
+            className="h-14 w-auto"
+          />
           <h1 className="mt-5 text-3xl font-bold tracking-tight">Moybirr</h1>
           <p className="mt-2 max-w-xs text-sm opacity-90">{t("app_tagline")}</p>
           <p className="mt-1 text-xs opacity-75">by Biruk Ketema</p>
