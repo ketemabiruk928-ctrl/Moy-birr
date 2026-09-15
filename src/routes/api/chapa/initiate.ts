@@ -31,7 +31,10 @@ export const ServerRoute = createServerFileRoute("/api/chapa/initiate").methods(
       .eq("id", user.id)
       .maybeSingle();
     if (profile?.is_blocked) {
-      return Response.json({ error: "This account has been blocked. Contact support." }, { status: 403 });
+      return Response.json(
+        { error: "This account has been blocked. Contact support." },
+        { status: 403 },
+      );
     }
 
     const { data: providerCfg } = await supabaseAdmin
@@ -61,10 +64,6 @@ export const ServerRoute = createServerFileRoute("/api/chapa/initiate").methods(
 
     const txRef = `moybirr_dep_${crypto.randomUUID()}`;
 
-    // Note: the wallet itself is always credited in ETB (admin_credit_wallet
-    // adds payment_orders.amount, which we store in birr below) - if you
-    // enable USD deposits for real, convert at Chapa's settled rate rather
-    // than crediting the USD figure as if it were ETB 1:1.
     const { data: order, error: orderErr } = await supabaseAdmin
       .from("payment_orders")
       .insert({ user_id: user.id, purpose: "deposit", amount, tx_ref: txRef, provider: "chapa" })
@@ -72,7 +71,10 @@ export const ServerRoute = createServerFileRoute("/api/chapa/initiate").methods(
       .single();
 
     if (orderErr || !order) {
-      return Response.json({ error: orderErr?.message ?? "Could not create payment order" }, { status: 500 });
+      return Response.json(
+        { error: orderErr?.message ?? "Could not create payment order" },
+        { status: 500 },
+      );
     }
 
     const origin = new URL(request.url).origin;
@@ -86,11 +88,36 @@ export const ServerRoute = createServerFileRoute("/api/chapa/initiate").methods(
         callback_url: `${origin}/api/chapa/webhook`,
         return_url: `${origin}/?deposit=pending`,
       });
+
+      // Success path — safe to log a short confirmation.
+      console.log("[chapa/initiate] OK", { orderId: order.id, amount, currency });
+
       return Response.json({ checkoutUrl, orderId: order.id });
     } catch (e) {
       // Roll the order back so it doesn't sit around as a dangling "pending".
       await supabaseAdmin.from("payment_orders").update({ status: "failed" }).eq("id", order.id);
-      const message = e instanceof Error ? e.message : "Chapa initialize failed";
+
+      // ---- DIAGNOSTIC BLOCK ------------------------------------------------
+      // Print everything Chapa said and everything we sent, minus the key.
+      // The key's first 14 chars are enough to tell whether it starts with
+      // CHASECK_TEST- (correct) or something else (wrong key) - never log
+      // the whole key.
+      const message = e instanceof Error ? e.message : String(e);
+      const keyPrefix = (process.env["CHAPA_SECRET_KEY"] ?? "").slice(0, 14);
+
+      console.log("[chapa/initiate] FAILED");
+      console.log("  error:", message);
+      console.log("  key prefix:", keyPrefix || "(empty — env var not set or not visible to this route)");
+      console.log("  amount:", amount, currency);
+      console.log("  tx_ref:", txRef);
+      console.log("  email:", user.email ?? "(none)");
+      console.log("  callback_url:", `${origin}/api/chapa/webhook`);
+      console.log("  return_url:", `${origin}/?deposit=pending`);
+      if (e instanceof Error && e.stack) {
+        console.log("  stack:", e.stack.split("\n").slice(0, 5).join("\n         "));
+      }
+      // ---- END DIAGNOSTIC BLOCK -------------------------------------------
+
       return Response.json({ error: message }, { status: 502 });
     }
   },
