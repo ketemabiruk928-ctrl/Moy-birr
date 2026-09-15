@@ -51,7 +51,6 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
-// Turn whatever shape the API returned into a string we can show a user.
 function errorText(json: unknown, fallback: string): string {
   if (!json || typeof json !== "object") return fallback;
   const raw = (json as { error?: unknown }).error;
@@ -248,7 +247,24 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
         },
         body: JSON.stringify({ amount: Number(amount) }),
       });
-      const json = await res.json().catch(() => ({}));
+
+      // TEMPORARY DEBUG — read raw text first, dump it in an alert.
+      const raw = await res.text();
+      alert(
+        "DEPOSIT DEBUG\n\n" +
+          "Status: " + res.status + "\n" +
+          "Content-Type: " + (res.headers.get("content-type") ?? "(none)") + "\n\n" +
+          "Body (first 800 chars):\n" +
+          raw.slice(0, 800),
+      );
+
+      let json: unknown = {};
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        /* not JSON */
+      }
+
       const checkoutUrl = (json as { checkoutUrl?: string }).checkoutUrl;
       if (!res.ok || !checkoutUrl) {
         throw new Error(errorText(json, `Deposit failed (${res.status})`));
@@ -259,11 +275,8 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
       setOpen(false);
       window.location.href = checkoutUrl;
     },
-    // TEMPORARY — pops a native alert with the exact error so we can debug.
-    // Remove the alert() line once deposits work.
     onError: (e: Error) => {
       toast.error(e.message);
-      alert("DEPOSIT ERROR:\n\n" + e.message);
     },
   });
 
