@@ -37,7 +37,9 @@ function ProfilePage() {
   const { t, lang, setLang } = useLang();
   const { user, profile, role, refresh, signOut } = useAuth();
   const qc = useQueryClient();
+
   const [name, setName] = useState(profile?.full_name ?? "");
+  const [email, setEmail] = useState((profile as { email?: string | null } | null)?.email ?? "");
   const [photo, setPhoto] = useState(profile?.photo_url ?? "");
   const [rating, setRating] = useState<{ bookingId: string; hotelId: string } | null>(null);
 
@@ -67,6 +69,21 @@ function ProfilePage() {
     enabled: !!user && role === "staff",
   });
 
+  // Private address row — separate from staff_profiles, only you and admins
+  // can read it.
+  const staffAddress = useQuery({
+    queryKey: ["my-staff-address", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("staff_addresses")
+        .select("wereda, house_number, landmark")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user && role === "staff",
+  });
+
   const bookings = useQuery({
     queryKey: ["bookings", user?.id],
     queryFn: async () => {
@@ -83,9 +100,18 @@ function ProfilePage() {
 
   const saveProfile = useMutation({
     mutationFn: async () => {
+      const trimmedEmail = email.trim();
+      if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        throw new Error("Enter a valid email address");
+      }
       const { error } = await supabase
         .from("profiles")
-        .update({ full_name: name, language: lang, photo_url: photo || null })
+        .update({
+          full_name: name,
+          language: lang,
+          photo_url: photo || null,
+          email: trimmedEmail || null,
+        })
         .eq("id", user!.id);
       if (error) throw error;
     },
@@ -110,6 +136,24 @@ function ProfilePage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Joining a hotel goes through the RPC. It sets the staff member to
+  // 'pending' until the hotel owner approves.
+  const joinHotel = useMutation({
+    mutationFn: async (code: string) => {
+      const { error } = await supabase.rpc("link_staff_to_hotel_code", {
+        _hotel_code: code.trim(),
+        _workplace_name: null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Request sent — your hotel owner needs to approve it");
+      setHotelCode("");
+      void qc.invalidateQueries({ queryKey: ["my-staff-profile"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const updateLocation = useMutation({
     mutationFn: async (payload: {
       lat: number | null;
@@ -120,8 +164,8 @@ function ProfilePage() {
       subcity: string;
       wereda: string;
       house_number: string;
-      hotel_code: string;
     }) => {
+      // Public staff fields
       const { error } = await supabase
         .from("staff_profiles")
         .update({
@@ -131,16 +175,25 @@ function ProfilePage() {
           region: payload.region || null,
           city: payload.city,
           subcity: payload.subcity || null,
-          wereda: payload.wereda || null,
-          house_number: payload.house_number || null,
-          hotel_code: payload.hotel_code || null,
         })
         .eq("user_id", user!.id);
       if (error) throw error;
+
+      // Private home address — separate table, only you and admins.
+      const { error: addrErr } = await supabase.from("staff_addresses").upsert(
+        {
+          user_id: user!.id,
+          wereda: payload.wereda || null,
+          house_number: payload.house_number || null,
+        },
+        { onConflict: "user_id" },
+      );
+      if (addrErr) throw addrErr;
     },
     onSuccess: () => {
       toast.success("Staff profile updated");
       void qc.invalidateQueries({ queryKey: ["my-staff-profile"] });
+      void qc.invalidateQueries({ queryKey: ["my-staff-address"] });
       void qc.invalidateQueries({ queryKey: ["staff-directory"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -153,6 +206,8 @@ function ProfilePage() {
   const [wereda, setWereda] = useState("");
   const [houseNumber, setHouseNumber] = useState("");
   const [hotelCode, setHotelCode] = useState("");
+
+  const employment = staffProfile.data?.employment_status ?? "unlinked";
 
   return (
     <>
@@ -184,13 +239,41 @@ function ProfilePage() {
             <Input id="pname" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
 
+          {/* Email — needed for Chapa receipts on deposits. Optional but
+              recommended; without it, deposits are refused by the server. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="pemail">
+              Email{" "}
+              <span className="font-normal text-muted-foreground">(for receipts)</span>
+            </Label>
+            <Input
+              id="pemail"
+              type="email"
+              inputMode="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Used only for payment receipts. Never shared publicly.
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label>Profile photo</Label>
             {photo ? (
-              <MediaImg src={photo} alt="Profile photo" className="size-20 rounded-full object-cover" />
+              <MediaImg
+                src={photo}
+                alt="Profile photo"
+                className="size-20 rounded-full object-cover"
+              />
             ) : null}
             {user ? (
-              <UploadButton userId={user.id} label="Upload profile photo" onUploaded={setPhoto} />
+              <UploadButton
+                userId={user.id}
+                label="Upload profile photo"
+                onUploaded={setPhoto}
+              />
             ) : null}
           </div>
 
@@ -214,7 +297,11 @@ function ProfilePage() {
             </div>
           </div>
 
-          <Button className="w-full" disabled={saveProfile.isPending} onClick={() => saveProfile.mutate()}>
+          <Button
+            className="w-full"
+            disabled={saveProfile.isPending}
+            onClick={() => saveProfile.mutate()}
+          >
             Save profile
           </Button>
         </Card>
@@ -227,6 +314,53 @@ function ProfilePage() {
                 <Star className="size-4 fill-primary text-primary" />
                 {Number(staffProfile.data?.rating ?? 0).toFixed(1)}
               </span>
+            </div>
+
+            {/* Employment status card — same as before */}
+            <div className="rounded-xl bg-muted/60 p-3">
+              {employment === "active" ? (
+                <>
+                  <p className="text-xs text-muted-foreground">You work at</p>
+                  <p className="text-sm font-semibold">
+                    {staffProfile.data?.workplace_hotel_name ?? "Your hotel"}
+                  </p>
+                  <Badge variant="secondary" className="mt-2">
+                    Approved · you can receive tips
+                  </Badge>
+                </>
+              ) : employment === "pending" ? (
+                <>
+                  <p className="text-sm font-semibold">Waiting for approval</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    You asked to join{" "}
+                    {staffProfile.data?.workplace_hotel_name ?? "a hotel"}. Your owner has to
+                    approve you before guests can tip you there.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold">Link your workplace</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {employment === "rejected"
+                      ? "Your last request was rejected. Check the Hotel ID with your manager and try again."
+                      : "Ask your manager for the hotel's Moybirr ID, then enter it here."}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <Input
+                      id="hcode"
+                      placeholder="MH-000123"
+                      value={hotelCode}
+                      onChange={(e) => setHotelCode(e.target.value)}
+                    />
+                    <Button
+                      disabled={!hotelCode.trim() || joinHotel.isPending}
+                      onClick={() => joinHotel.mutate(hotelCode)}
+                    >
+                      Join
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -271,11 +405,12 @@ function ProfilePage() {
                   onChange={(e) => setSubcity(e.target.value)}
                 />
               </div>
+              {/* Wereda + house number moved to private staff_addresses table */}
               <div className="space-y-1.5">
                 <Label htmlFor="wereda">Wereda</Label>
                 <Input
                   id="wereda"
-                  placeholder={staffProfile.data?.wereda ?? "03"}
+                  placeholder={staffAddress.data?.wereda ?? "03"}
                   value={wereda}
                   onChange={(e) => setWereda(e.target.value)}
                 />
@@ -284,38 +419,32 @@ function ProfilePage() {
                 <Label htmlFor="house">House number</Label>
                 <Input
                   id="house"
-                  placeholder={staffProfile.data?.house_number ?? "Optional"}
+                  placeholder={staffAddress.data?.house_number ?? "Optional"}
                   value={houseNumber}
                   onChange={(e) => setHouseNumber(e.target.value)}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="hcode">Hotel code (Moybirr)</Label>
-                <Input
-                  id="hcode"
-                  placeholder={staffProfile.data?.hotel_code ?? "e.g. MO-000123"}
-                  value={hotelCode}
-                  onChange={(e) => setHotelCode(e.target.value)}
-                />
-              </div>
             </div>
+
+            <p className="text-[11px] text-muted-foreground">
+              Your wereda and house number are private. Guests and hotel owners never see them —
+              only you and Moybirr support.
+            </p>
 
             <Button
               className="w-full"
               disabled={updateLocation.isPending}
               onClick={() => {
-                const payload = {
+                updateLocation.mutate({
                   lat: staffProfile.data?.lat ?? null,
                   lng: staffProfile.data?.lng ?? null,
                   position_name: position || staffProfile.data?.position || "waiter",
                   region: region || staffProfile.data?.region || "",
                   city: city || staffProfile.data?.city || "Addis Ababa",
                   subcity: subcity || staffProfile.data?.subcity || "",
-                  wereda: wereda || staffProfile.data?.wereda || "",
-                  house_number: houseNumber || staffProfile.data?.house_number || "",
-                  hotel_code: hotelCode || staffProfile.data?.hotel_code || "",
-                };
-                updateLocation.mutate(payload);
+                  wereda: wereda || staffAddress.data?.wereda || "",
+                  house_number: houseNumber || staffAddress.data?.house_number || "",
+                });
               }}
             >
               Save working place
@@ -335,9 +464,8 @@ function ProfilePage() {
                       region: region || staffProfile.data?.region || "",
                       city: city || staffProfile.data?.city || "Addis Ababa",
                       subcity: subcity || staffProfile.data?.subcity || "",
-                      wereda: wereda || staffProfile.data?.wereda || "",
-                      house_number: houseNumber || staffProfile.data?.house_number || "",
-                      hotel_code: hotelCode || staffProfile.data?.hotel_code || "",
+                      wereda: wereda || staffAddress.data?.wereda || "",
+                      house_number: houseNumber || staffAddress.data?.house_number || "",
                     }),
                   () => toast.error("Could not read your GPS location"),
                 );
@@ -351,7 +479,8 @@ function ProfilePage() {
               <p className="text-xs text-muted-foreground">
                 <MapPin className="mr-1 inline size-3" />
                 {Number(staffProfile.data.lat).toFixed(3)},{" "}
-                {Number(staffProfile.data.lng).toFixed(3)} · {staffProfile.data.rating_count} ratings
+                {Number(staffProfile.data.lng).toFixed(3)} · {staffProfile.data.rating_count}{" "}
+                ratings
               </p>
             ) : null}
           </Card>
@@ -545,4 +674,4 @@ function Stars({ value, onChange }: { value: number; onChange: (v: number) => vo
       ))}
     </div>
   );
-}             
+}
