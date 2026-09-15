@@ -52,8 +52,6 @@ export const Route = createFileRoute("/")({
 });
 
 // Turn whatever shape the API returned into a string we can show a user.
-// The API might send { error: "text" } or { error: { message: "text" } }
-// or nothing at all — this handles every case.
 function errorText(json: unknown, fallback: string): string {
   if (!json || typeof json !== "object") return fallback;
   const raw = (json as { error?: unknown }).error;
@@ -261,7 +259,12 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
       setOpen(false);
       window.location.href = checkoutUrl;
     },
-    onError: (e: Error) => toast.error(e.message),
+    // TEMPORARY — pops a native alert with the exact error so we can debug.
+    // Remove the alert() line once deposits work.
+    onError: (e: Error) => {
+      toast.error(e.message);
+      alert("DEPOSIT ERROR:\n\n" + e.message);
+    },
   });
 
   return (
