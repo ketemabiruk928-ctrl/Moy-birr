@@ -1,112 +1,124 @@
-const CHAPA_BASE_URL = "https://api.chapa.co/v1";
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-const CHAPA_SECRET_KEY = process.env.CHAPA_SECRET_KEY;
+import { createServerFileRoute } from "@tanstack/react-start/server";
+import { getRequest } from "@tanstack/react-start/server";
+import { chapaInitialize } from "@/lib/chapa.server";
 
-const svcHeaders = {
-  Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-  apikey: SUPABASE_SERVICE_KEY,
-  "Content-Type": "application/json",
-};
+// POST /api/chapa/initiate  { amount: number }
+// Creates a pending payment_orders row for the logged-in user, then asks
+// Chapa for a checkout URL. The wallet balance is NOT touched here - only
+// the webhook (after Chapa confirms payment) can do that.
+export const ServerRoute = createServerFileRoute("/api/chapa/initiate").methods({
+  POST: async () => {
+    const request = getRequest();
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+    // Verify the caller with their own bearer token so we know which user
+    // this deposit belongs to - never trust a user_id sent in the body.
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader) {
+      return Response.json({ error: "Not authenticated" }, { status: 401 });
+    }
 
-  const authHeader = req.headers["authorization"] || req.headers["Authorization"];
-  if (!authHeader) return res.status(401).json({ error: "Not authenticated" });
-  const token = authHeader.toString().replace(/^Bearer\s+/i, "");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const token = authHeader.replace(/^Bearer\s+/i, "");
+    const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token);
+    if (userErr || !userData?.user) {
+      return Response.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    const user = userData.user;
 
-  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      apikey: SUPABASE_ANON_KEY,
-    },
-  });
-  if (!userRes.ok) return res.status(401).json({ error: "Not authenticated" });
-  const user = await userRes.json();
-  if (!user?.id) return res.status(401).json({ error: "Not authenticated" });
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("is_blocked, country_code, email")
+      .eq("id", user.id)
+      .maybeSingle();
 
-  const profileRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=is_blocked,country_code&limit=1`,
-    { headers: svcHeaders }
-  );
-  const profileData = await profileRes.json();
-  const profile = Array.isArray(profileData) ? profileData[0] : null;
-  if (profile?.is_blocked) return res.status(403).json({ error: "This account has been blocked." });
+    if (profile?.is_blocked) {
+      return Response.json(
+        { error: "This account has been blocked. Contact support." },
+        { status: 403 },
+      );
+    }
 
-  const countryCode = profile?.country_code ?? "ET";
-  const cfgRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/payment_provider_config?country_code=eq.${countryCode}&select=is_live&limit=1`,
-    { headers: svcHeaders }
-  );
-  const cfgData = await cfgRes.json();
-  const cfg = Array.isArray(cfgData) ? cfgData[0] : null;
-  if (cfg && cfg.is_live === false) {
-    return res.status(400).json({ error: "Deposits aren't available in your country yet." });
-  }
+    const { data: providerCfg } = await supabaseAdmin
+      .from("payment_provider_config")
+      .select("provider, is_live")
+      .eq("country_code", profile?.country_code ?? "ET")
+      .maybeSingle();
+    if (!providerCfg?.is_live) {
+      return Response.json(
+        { error: "Deposits aren't available in your country yet." },
+        { status: 400 },
+      );
+    }
 
-  const { amount, currency = "ETB" } = req.body ?? {};
-  const numAmount = Number(amount);
-  if (!Number.isFinite(numAmount) || numAmount <= 0) {
-    return res.status(400).json({ error: "Amount must be a positive number" });
-  }
+    let body: { amount?: number; currency?: "ETB" | "USD" };
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
 
-  const txRef = `moybirr_dep_${crypto.randomUUID()}`;
+    const amount = Number(body.amount);
+    const currency = body.currency === "USD" ? "USD" : "ETB";
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return Response.json({ error: "Amount must be a positive number" }, { status: 400 });
+    }
 
-  // Use RPC to insert payment order — bypasses RLS cleanly with service role
-  const orderRes = await fetch(`${SUPABASE_URL}/rest/v1/payment_orders`, {
-    method: "POST",
-    headers: {
-      ...svcHeaders,
-      Prefer: "return=representation",
-    },
-    body: JSON.stringify({
-      user_id: user.id,
-      purpose: "deposit",
-      amount: numAmount,
-      tx_ref: txRef,
-      provider: "chapa",
-      status: "pending",
-    }),
-  });
+    // Chapa requires a real email address. Our phone-login accounts use
+    // <phone>@moybirr.app as a synthetic address, which Chapa rejects with
+    // {"error":{"email":["validation.email"]}}. Prefer a real email stored
+    // on the user's profile; fall back to the auth email only if it isn't
+    // one of our @moybirr.app placeholders. Refuse the deposit if we can't
+    // find one - better than sending Chapa a made-up address.
+    const authEmail = user.email ?? "";
+    const profileEmail = profile?.email ?? "";
+    const realEmail =
+      (profileEmail && !profileEmail.endsWith("@moybirr.app") ? profileEmail : "") ||
+      (authEmail && !authEmail.endsWith("@moybirr.app") ? authEmail : "");
 
-  const orderText = await orderRes.text();
-  let orderData;
-  try { orderData = JSON.parse(orderText); } catch { orderData = null; }
-  const order = Array.isArray(orderData) ? orderData[0] : null;
-  if (!order?.id) {
-    console.error("Order creation failed:", orderText);
-    return res.status(500).json({ error: "Could not create payment order" });
-  }
+    if (!realEmail) {
+      return Response.json(
+        {
+          error:
+            "Please add an email to your profile before depositing. " +
+            "Open Profile → fill the Email field.",
+        },
+        { status: 400 },
+      );
+    }
 
-  const origin = `https://${req.headers.host}`;
-  const chapaRes = await fetch(`${CHAPA_BASE_URL}/transaction/initialize`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${CHAPA_SECRET_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      amount: numAmount.toFixed(2),
-      currency,
-      tx_ref: txRef,
-      email: user.email ?? `${user.id}@moybirr.app`,
-      callback_url: `${origin}/api/chapa/webhook`,
-      return_url: `${origin}/?deposit=pending`,
-    }),
-  });
-  const chapaData = await chapaRes.json();
-  if (!chapaRes.ok || chapaData.status !== "success" || !chapaData.data?.checkout_url) {
-    await fetch(`${SUPABASE_URL}/rest/v1/payment_orders?id=eq.${order.id}`, {
-      method: "PATCH",
-      headers: svcHeaders,
-      body: JSON.stringify({ status: "failed" }),
-    });
-    return res.status(502).json({ error: chapaData.message ?? "Chapa initialize failed" });
-  }
+    const txRef = `moybirr_dep_${crypto.randomUUID()}`;
 
-  return res.status(200).json({ checkoutUrl: chapaData.data.checkout_url, orderId: order.id });
-}
+    const { data: order, error: orderErr } = await supabaseAdmin
+      .from("payment_orders")
+      .insert({ user_id: user.id, purpose: "deposit", amount, tx_ref: txRef, provider: "chapa" })
+      .select("id")
+      .single();
+
+    if (orderErr || !order) {
+      return Response.json(
+        { error: orderErr?.message ?? "Could not create payment order" },
+        { status: 500 },
+      );
+    }
+
+    const origin = new URL(request.url).origin;
+
+    try {
+      const { checkoutUrl } = await chapaInitialize({
+        amount,
+        currency,
+        tx_ref: txRef,
+        email: realEmail,
+        callback_url: `${origin}/api/chapa/webhook`,
+        return_url: `${origin}/?deposit=pending`,
+      });
+
+      return Response.json({ checkoutUrl, orderId: order.id });
+    } catch (e) {
+      // Roll the order back so it doesn't sit around as a dangling "pending".
+      await supabaseAdmin.from("payment_orders").update({ status: "failed" }).eq("id", order.id);
+      const message = e instanceof Error ? e.message : "Chapa initialize failed";
+      return Response.json({ error: message }, { status: 502 });
+    }
+  },
+});
