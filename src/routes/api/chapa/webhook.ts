@@ -1,4 +1,4 @@
-import { createServerFileRoute } from "@tanstack/react-start/server";
+import { createFileRoute } from "@tanstack/react-router";
 import { chapaVerify, isValidChapaSignature } from "@/lib/chapa.server";
 
 // POST /api/chapa/webhook - called by Chapa's servers, not the browser.
@@ -7,59 +7,63 @@ import { chapaVerify, isValidChapaSignature } from "@/lib/chapa.server";
 // -> we independently call Chapa's own verify endpoint (never trust the
 // webhook body's amount/status by itself) -> only then do we credit the
 // wallet, through admin_credit_wallet() which is idempotent.
-export const ServerRoute = createServerFileRoute("/api/chapa/webhook").methods({
-  POST: async ({ request }) => {
-    const rawBody = await request.text();
+export const Route = createFileRoute("/api/chapa/webhook")({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const rawBody = await request.text();
 
-    const signature = request.headers.get("chapa-signature");
-    const validSignature = await isValidChapaSignature(rawBody, signature);
-    if (!validSignature) {
-      console.error("[chapa webhook] invalid or missing signature");
-      return new Response("invalid signature", { status: 401 });
-    }
+        const signature = request.headers.get("chapa-signature");
+        const validSignature = await isValidChapaSignature(rawBody, signature);
+        if (!validSignature) {
+          console.error("[chapa webhook] invalid or missing signature");
+          return new Response("invalid signature", { status: 401 });
+        }
 
-    let payload: { tx_ref?: string; reference?: string };
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      return new Response("invalid json", { status: 400 });
-    }
+        let payload: { tx_ref?: string; reference?: string };
+        try {
+          payload = JSON.parse(rawBody);
+        } catch {
+          return new Response("invalid json", { status: 400 });
+        }
 
-    // Chapa's payment webhooks use `tx_ref`; transfer webhooks use
-    // `reference` - accept either so this one handler covers both deposits
-    // and withdrawals.
-    const txRef = payload.tx_ref ?? payload.reference;
-    if (!txRef) {
-      return new Response("missing tx_ref", { status: 400 });
-    }
+        // Chapa's payment webhooks use `tx_ref`; transfer webhooks use
+        // `reference` - accept either so this one handler covers both
+        // deposits and withdrawals.
+        const txRef = payload.tx_ref ?? payload.reference;
+        if (!txRef) {
+          return new Response("missing tx_ref", { status: 400 });
+        }
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: order } = await supabaseAdmin
-      .from("payment_orders")
-      .select("id, amount, status, tx_ref")
-      .eq("tx_ref", txRef)
-      .maybeSingle();
+        const { data: order } = await supabaseAdmin
+          .from("payment_orders")
+          .select("id, amount, status, tx_ref")
+          .eq("tx_ref", txRef)
+          .maybeSingle();
 
-    if (order) {
-      await handleDepositWebhook(supabaseAdmin, order, txRef);
-      return new Response("ok", { status: 200 });
-    }
+        if (order) {
+          await handleDepositWebhook(supabaseAdmin, order, txRef);
+          return new Response("ok", { status: 200 });
+        }
 
-    const { data: payout } = await supabaseAdmin
-      .from("payout_requests")
-      .select("id, amount, status, tx_ref")
-      .eq("tx_ref", txRef)
-      .maybeSingle();
+        const { data: payout } = await supabaseAdmin
+          .from("payout_requests")
+          .select("id, amount, status, tx_ref")
+          .eq("tx_ref", txRef)
+          .maybeSingle();
 
-    if (payout) {
-      await handlePayoutWebhook(supabaseAdmin, payout, txRef);
-      return new Response("ok", { status: 200 });
-    }
+        if (payout) {
+          await handlePayoutWebhook(supabaseAdmin, payout, txRef);
+          return new Response("ok", { status: 200 });
+        }
 
-    console.error("[chapa webhook] unknown tx_ref/reference", txRef);
-    // 200 so Chapa doesn't retry forever for a reference we'll never find.
-    return new Response("ok", { status: 200 });
+        console.error("[chapa webhook] unknown tx_ref/reference", txRef);
+        // 200 so Chapa doesn't retry forever for a reference we'll never find.
+        return new Response("ok", { status: 200 });
+      },
+    },
   },
 });
 
@@ -104,10 +108,7 @@ async function handlePayoutWebhook(
   if (payout.status === "completed" || payout.status === "failed") return; // already resolved
 
   // Chapa's transfer verify endpoint is the source of truth, same principle
-  // as deposits: don't trust the webhook body alone. Transfers are checked
-  // via the same /transaction/verify/{reference} pattern Chapa uses for
-  // charges - confirm the exact endpoint for transfer status in your
-  // dashboard/docs before relying on this in production.
+  // as deposits: don't trust the webhook body alone.
   const verified = await chapaVerify(txRef);
   const success = verified.status === "success";
 
