@@ -51,6 +51,7 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
+// Turn whatever shape the API returned into a string we can show a user.
 function errorText(json: unknown, fallback: string): string {
   if (!json || typeof json !== "object") return fallback;
   const raw = (json as { error?: unknown }).error;
@@ -232,39 +233,30 @@ function ActionTile({ icon: Icon, label }: { icon: typeof Send; label: string })
 
 function DepositDialog({ onDone }: { onDone: () => void }) {
   const { t } = useLang();
-  const { session } = useAuth();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
 
   const m = useMutation({
     mutationFn: async () => {
-      if (!session) throw new Error("Not signed in");
+      // Always read the newest session directly from Supabase, not from the
+      // React auth context. The context can lag behind a fresh login or a
+      // token refresh, which makes the server see an empty/expired bearer
+      // token and reply 401 Unauthorized.
+      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr || !sessionData.session?.access_token) {
+        throw new Error("Not signed in. Please log out and log back in.");
+      }
+
       const res = await fetch("/api/chapa/initiate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${sessionData.session.access_token}`,
         },
         body: JSON.stringify({ amount: Number(amount) }),
       });
 
-      // TEMPORARY DEBUG — read raw text first, dump it in an alert.
-      const raw = await res.text();
-      alert(
-        "DEPOSIT DEBUG\n\n" +
-          "Status: " + res.status + "\n" +
-          "Content-Type: " + (res.headers.get("content-type") ?? "(none)") + "\n\n" +
-          "Body (first 800 chars):\n" +
-          raw.slice(0, 800),
-      );
-
-      let json: unknown = {};
-      try {
-        json = JSON.parse(raw);
-      } catch {
-        /* not JSON */
-      }
-
+      const json = await res.json().catch(() => ({}));
       const checkoutUrl = (json as { checkoutUrl?: string }).checkoutUrl;
       if (!res.ok || !checkoutUrl) {
         throw new Error(errorText(json, `Deposit failed (${res.status})`));
@@ -273,11 +265,11 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
     },
     onSuccess: (checkoutUrl) => {
       setOpen(false);
+      // Hand off to Chapa's hosted checkout. Chapa collects Telebirr, CBE,
+      // or card details on their own page - we never see them.
       window.location.href = checkoutUrl;
     },
-    onError: (e: Error) => {
-      toast.error(e.message);
-    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   return (
@@ -399,7 +391,6 @@ function SendDialog({ onDone }: { onDone: () => void }) {
 
 function WithdrawDialog({ onDone }: { onDone: () => void }) {
   const { t } = useLang();
-  const { session } = useAuth();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [bankCode, setBankCode] = useState("");
@@ -408,10 +399,13 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
 
   const banksQuery = useQuery({
     queryKey: ["chapa-banks"],
-    enabled: open && !!session,
+    enabled: open,
     queryFn: async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Not signed in");
       const res = await fetch("/api/chapa/banks", {
-        headers: { Authorization: `Bearer ${session!.access_token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json().catch(() => ({}));
       const banks = (json as { banks?: { code: string; name: string }[] }).banks;
@@ -424,12 +418,14 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
 
   const m = useMutation({
     mutationFn: async () => {
-      if (!session) throw new Error("Not signed in");
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Not signed in. Please log out and log back in.");
       const res = await fetch("/api/chapa/withdraw", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           amount: Number(amount),
