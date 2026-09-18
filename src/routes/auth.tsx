@@ -65,6 +65,7 @@ function AuthPage() {
     });
     setBusy(false);
     if (error) {
+      alert(JSON.stringify(error, null, 2));
       toast.error("Could not log in. Check your phone number and password.");
       return;
     }
