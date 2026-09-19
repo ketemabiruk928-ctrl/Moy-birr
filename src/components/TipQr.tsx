@@ -5,6 +5,14 @@ import { Copy, Share2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
+/**
+ * Build the link that goes into a QR code.
+ *
+ * - When only a hotel is given, the QR opens the public hotel page.
+ * - When a staff member is given, the QR opens that staff member's public
+ *   page, which shows only: name, Moybirr ID, position, hotel, rating.
+ * - No phone, GPS, or other private data is ever encoded or shown.
+ */
 export function buildPayLink({
   hotelId,
   staffId,
@@ -14,10 +22,15 @@ export function buildPayLink({
   staffId?: string | null | undefined;
   origin: string;
 }) {
-  const params = new URLSearchParams();
-  if (hotelId) params.set("hotel", hotelId);
-  if (staffId) params.set("staff", staffId);
-  return `${origin}/pay?${params.toString()}`;
+  // Prefer the staff page when a staff member is given — that's the tip QR.
+  if (staffId) {
+    return `${origin}/staff/${staffId}`;
+  }
+  if (hotelId) {
+    return `${origin}/h/${hotelId}`;
+  }
+  // Fallback: send people to the app so they can sign in and choose.
+  return `${origin}/`;
 }
 
 export function TipQr({
@@ -32,14 +45,14 @@ export function TipQr({
   staffId?: string | null | undefined;
 }) {
   const [origin] = useState(() =>
-    typeof window !== "undefined" ? window.location.origin : "https://elshadaybg4.lovable.app",
+    typeof window !== "undefined" ? window.location.origin : "https://moy-birr.vercel.app",
   );
   const link = buildPayLink({ hotelId, staffId, origin });
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link);
-      toast.success("Payment link copied");
+      toast.success("Link copied");
     } catch {
       toast.error("Could not copy the link");
     }
