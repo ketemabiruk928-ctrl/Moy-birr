@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { QrScanButton } from "@/components/QrScanner";
-import { distanceKm, formatDistance, parsePayCode, useMyLocation } from "@/lib/geo";
+import { distanceKm, formatDistance, useMyLocation } from "@/lib/geo";
 
 export const Route = createFileRoute("/pay")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -46,6 +46,54 @@ export const Route = createFileRoute("/pay")({
 
 const tipPercents = [5, 10, 15];
 
+/**
+ * Parse a QR code value into a hotel or staff identifier.
+ *
+ * Accepts:
+ *   https://moy-birr.vercel.app/staff/<uuid>          → { staff: uuid }
+ *   https://moy-birr.vercel.app/h/MH-000001           → { hotel: MH-000001 }
+ *   https://moy-birr.vercel.app/pay?hotel=X&staff=Y   → legacy
+ *   moybirr://pay/staff/<uuid>                         → legacy
+ *   moybirr://pay/hotel/<uuid>                         → legacy
+ *   <raw uuid>                                         → assume hotel uuid
+ */
+function parseQrValue(raw: string): { hotel?: string; staff?: string } | null {
+  const text = raw.trim();
+  if (!text) return null;
+
+  // Try URL parse first (covers https:// and moybirr://)
+  try {
+    const url = new URL(text);
+    const path = url.pathname.replace(/\/+$/, ""); // strip trailing slashes
+
+    // /staff/<uuid>
+    const staffMatch = path.match(/\/staff\/([^/]+)$/);
+    if (staffMatch) return { staff: staffMatch[1] };
+
+    // /h/<code-or-uuid>
+    const hotelMatch = path.match(/\/h\/([^/]+)$/);
+    if (hotelMatch) return { hotel: hotelMatch[1] };
+
+    // legacy: ?hotel=...&staff=...
+    const hotel = url.searchParams.get("hotel") ?? undefined;
+    const staff = url.searchParams.get("staff") ?? undefined;
+    if (hotel || staff) return { ...(hotel ? { hotel } : {}), ...(staff ? { staff } : {}) };
+  } catch {
+    /* not a URL */
+  }
+
+  // Bare UUID → assume hotel
+  const uuid = text.match(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+  );
+  if (uuid) return { hotel: uuid[0] };
+
+  // Bare hotel code → e.g. "MH-000001"
+  if (/^MH-\d+$/i.test(text)) return { hotel: text.toUpperCase() };
+
+  return null;
+}
+
 function PayPage() {
   const { t } = useLang();
   const { user } = useAuth();
@@ -65,26 +113,30 @@ function PayPage() {
 
   const { coords, status, locate } = useMyLocation();
 
+  // Hotel list for the search dropdown — from the public view (no owner_id, no qr_code).
   const hotels = useQuery({
-    queryKey: ["hotels-simple"],
+    queryKey: ["hotels-public"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("hotels")
-        .select("id,name,city,lat,lng")
+        .from("hotels_public")
+        .select("id,name,city,hotel_code")
         .order("name");
       if (error) throw error;
       return data ?? [];
     },
   });
 
+  // Staff list for the selected hotel — from the public view.
+  // Only name, position, rating are exposed by the view — no phone, no GPS.
   const staff = useQuery({
-    queryKey: ["staff-of-hotel", hotelId],
+    queryKey: ["staff-public", hotelId],
+    enabled: !!hotelId,
     queryFn: async () => {
-      let q = supabase
-        .from("staff_profiles")
-        .select("id,user_id,position,rating,rating_count,hotel_id, profiles:user_id(full_name)");
-      if (hotelId) q = q.eq("hotel_id", hotelId);
-      const { data, error } = await q.limit(30);
+      const { data, error } = await supabase
+        .from("staff_public")
+        .select("id,position,rating,rating_count,hotel_id,full_name,photo_url,moybirr_id")
+        .eq("hotel_id", hotelId!)
+        .limit(30);
       if (error) throw error;
       return data ?? [];
     },
@@ -127,7 +179,6 @@ function PayPage() {
         if (rateError) throw rateError;
       }
 
-      // Rate hotel service after payment
       if (hotelStars > 0) {
         const { data: authData } = await supabase.auth.getUser();
         const guestId = authData.user?.id;
@@ -155,26 +206,67 @@ function PayPage() {
       setHotelComment("");
       void qc.invalidateQueries({ queryKey: ["wallet"] });
       void qc.invalidateQueries({ queryKey: ["transactions"] });
-      void qc.invalidateQueries({ queryKey: ["staff-of-hotel"] });
+      void qc.invalidateQueries({ queryKey: ["staff-public"] });
       void qc.invalidateQueries({ queryKey: ["owner-hotel-ratings"] });
       void qc.invalidateQueries({ queryKey: ["hotel-ratings"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const handleScan = (text: string) => {
-    const parsed = parsePayCode(text);
+  const handleScan = async (text: string) => {
+    const parsed = parseQrValue(text);
     if (!parsed) {
       toast.error("That QR code is not a Moybirr payment code");
       return;
     }
-    if (parsed.hotel) {
-      setHotelId(parsed.hotel);
-      setShowHotelSearch(false);
+
+    // Staff QR scanned first — apply staff, then resolve their hotel.
+    if (parsed.staff) {
+      setStaffId(parsed.staff);
+      // Look up which hotel this staff works at so the hotel field fills in.
+      const { data: staffRow, error: staffErr } = await supabase
+        .from("staff_public")
+        .select("hotel_id,full_name")
+        .eq("id", parsed.staff)
+        .maybeSingle();
+      if (staffErr) {
+        toast.error("Could not load that staff member");
+        return;
+      }
+      if (staffRow?.hotel_id) {
+        setHotelId(staffRow.hotel_id);
+        setShowHotelSearch(false);
+        if (staffRow.full_name) setStaffName(staffRow.full_name);
+      }
+      toast.success(`Staff QR scanned — enter the bill for ${staffRow?.full_name ?? "staff"}`);
+      return;
     }
-    if (parsed.staff) setStaffId(parsed.staff);
-    else if (parsed.hotel) setStaffId(null);
-    toast.success(parsed.staff ? "Staff QR scanned — enter the bill" : "Hotel QR scanned");
+
+    // Hotel QR — could be a hotel code (MH-000001) or a UUID.
+    if (parsed.hotel) {
+      const value = parsed.hotel;
+      // If it looks like a UUID, it's already the internal id.
+      const isUuid = /^[0-9a-f]{8}-/i.test(value);
+      if (isUuid) {
+        setHotelId(value);
+      } else {
+        // Hotel code — look up the internal id.
+        const { data: hotelRow, error: hotelErr } = await supabase
+          .from("hotels_public")
+          .select("id,name")
+          .eq("hotel_code", value.toUpperCase())
+          .maybeSingle();
+        if (hotelErr || !hotelRow) {
+          toast.error("Hotel not found");
+          return;
+        }
+        setHotelId(hotelRow.id);
+      }
+      setStaffId(null);
+      setStaffName("");
+      setShowHotelSearch(false);
+      toast.success("Hotel QR scanned");
+    }
   };
 
   const selectedHotel = (hotels.data ?? []).find((h) => h.id === hotelId) ?? null;
@@ -182,18 +274,10 @@ function PayPage() {
   const hotelResults = (() => {
     const q = hotelQuery.trim().toLowerCase();
     const rows = (hotels.data ?? [])
-      .map((h) => ({
-        ...h,
-        dist:
-          coords && h.lat != null && h.lng != null
-            ? distanceKm(coords, { lat: h.lat, lng: h.lng })
-            : null,
-      }))
       .filter(
         (h) =>
           !q || h.name.toLowerCase().includes(q) || (h.city ?? "").toLowerCase().includes(q),
       );
-    if (coords) rows.sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9));
     return rows.slice(0, 6);
   })();
 
@@ -201,14 +285,12 @@ function PayPage() {
     const q = staffName.trim().toLowerCase();
     return (staff.data ?? []).filter((s) => {
       if (!q) return true;
-      const p = s.profiles as { full_name?: string } | null;
       return (
-        (p?.full_name ?? "").toLowerCase().includes(q) ||
+        (s.full_name ?? "").toLowerCase().includes(q) ||
         (s.position ?? "").toLowerCase().includes(q)
       );
     });
   })();
-
 
   return (
     <>
@@ -302,12 +384,6 @@ function PayPage() {
                       >
                         <span className="font-medium">{h.name}</span>
                         <span className="text-muted-foreground"> · {h.city}</span>
-                        {h.dist != null ? (
-                          <span className="text-muted-foreground">
-                            {" "}
-                            · {formatDistance(h.dist)} away
-                          </span>
-                        ) : null}
                       </button>
                     ))}
                   </div>
@@ -315,7 +391,6 @@ function PayPage() {
               </div>
             ) : null}
           </div>
-
         </Card>
 
         <Card className="shadow-card p-5">
@@ -380,32 +455,31 @@ function PayPage() {
                     : "No staff matches that name."}
                 </p>
               ) : (
-                staffResults.map((s) => {
-                  const p = s.profiles as { full_name?: string } | null;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => {
-                        setStaffId(s.id);
-                        setStaffName(p?.full_name || "Staff member");
-                      }}
-                      className={`flex items-center justify-between rounded-xl border p-3 text-left ${
-                        staffId === s.id ? "border-primary bg-accent" : "border-border"
-                      }`}
-                    >
-                      <span>
-                        <span className="text-sm font-medium">{p?.full_name || "Staff member"}</span>
-                        <span className="block text-xs text-muted-foreground capitalize">
-                          {s.position}
-                        </span>
+                staffResults.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => {
+                      setStaffId(s.id);
+                      setStaffName(s.full_name || "Staff member");
+                    }}
+                    className={`flex items-center justify-between rounded-xl border p-3 text-left ${
+                      staffId === s.id ? "border-primary bg-accent" : "border-border"
+                    }`}
+                  >
+                    <span>
+                      <span className="text-sm font-medium">
+                        {s.full_name || "Staff member"}
                       </span>
-                      <span className="flex items-center gap-1 text-xs font-semibold">
-                        <Star className="size-3.5 fill-primary text-primary" />
-                        {Number(s.rating).toFixed(1)}
+                      <span className="block text-xs text-muted-foreground capitalize">
+                        {s.position}
                       </span>
-                    </button>
-                  );
-                })
+                    </span>
+                    <span className="flex items-center gap-1 text-xs font-semibold">
+                      <Star className="size-3.5 fill-primary text-primary" />
+                      {Number(s.rating).toFixed(1)}
+                    </span>
+                  </button>
+                ))
               )}
             </div>
           </div>
@@ -468,7 +542,6 @@ function PayPage() {
             ) : null}
           </div>
 
-
           <div className="mt-5 rounded-xl bg-muted p-4">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">{t("service_bill")}</span>
@@ -505,6 +578,3 @@ function PayPage() {
     </>
   );
 }
-
-                                                    
-                      
