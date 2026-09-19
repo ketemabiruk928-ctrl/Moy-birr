@@ -10,6 +10,7 @@ import {
   EyeOff,
   Gift,
   QrCode,
+  Receipt,
   Send,
   Landmark,
 } from "lucide-react";
@@ -174,6 +175,18 @@ function Wallet() {
             </Button>
           </Card>
         ) : null}
+
+        <Link to="/receipts" className="block">
+          <Card className="shadow-card flex items-center justify-between p-4">
+            <div>
+              <p className="text-sm font-semibold">My receipts</p>
+              <p className="text-xs text-muted-foreground">
+                Download or share any payment receipt
+              </p>
+            </div>
+            <Receipt className="size-5 text-primary" />
+          </Card>
+        </Link>
 
         <div>
           <div className="mb-2 flex items-center justify-between px-1">
