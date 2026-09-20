@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { LogOut, MapPin, Star, Languages, Navigation } from "lucide-react";
+import { LogOut, MapPin, Star, Languages, Navigation, IdCard } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { formatETB, languages, useLang } from "@/lib/i18n";
@@ -69,8 +69,6 @@ function ProfilePage() {
     enabled: !!user && role === "staff",
   });
 
-  // Private address row — separate from staff_profiles, only you and admins
-  // can read it.
   const staffAddress = useQuery({
     queryKey: ["my-staff-address", user?.id],
     queryFn: async () => {
@@ -136,8 +134,6 @@ function ProfilePage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // Joining a hotel goes through the RPC. It sets the staff member to
-  // 'pending' until the hotel owner approves.
   const joinHotel = useMutation({
     mutationFn: async (code: string) => {
       const { error } = await supabase.rpc("link_staff_to_hotel_code", {
@@ -165,7 +161,6 @@ function ProfilePage() {
       wereda: string;
       house_number: string;
     }) => {
-      // Public staff fields
       const { error } = await supabase
         .from("staff_profiles")
         .update({
@@ -179,7 +174,6 @@ function ProfilePage() {
         .eq("user_id", user!.id);
       if (error) throw error;
 
-      // Private home address — separate table, only you and admins.
       const { error: addrErr } = await supabase.from("staff_addresses").upsert(
         {
           user_id: user!.id,
@@ -239,8 +233,6 @@ function ProfilePage() {
             <Input id="pname" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
 
-          {/* Email — needed for Chapa receipts on deposits. Optional but
-              recommended; without it, deposits are refused by the server. */}
           <div className="space-y-1.5">
             <Label htmlFor="pemail">
               Email{" "}
@@ -306,6 +298,16 @@ function ProfilePage() {
           </Button>
         </Card>
 
+        {/* Guest "My QR" — shows on the account's own profile so guests can
+            share the code that leads to their /c/MG-xxxxx public card. */}
+        {role === "guest" && profile?.moybirr_id ? (
+          <TipQr
+            title="My Moybirr QR code"
+            description="Share this with anyone who wants to send you money — it opens your public card."
+            staffCode={profile.moybirr_id}
+          />
+        ) : null}
+
         {role === "staff" ? (
           <Card className="shadow-card space-y-3 p-5">
             <div className="flex items-center justify-between">
@@ -316,7 +318,6 @@ function ProfilePage() {
               </span>
             </div>
 
-            {/* Employment status card — same as before */}
             <div className="rounded-xl bg-muted/60 p-3">
               {employment === "active" ? (
                 <>
@@ -405,7 +406,6 @@ function ProfilePage() {
                   onChange={(e) => setSubcity(e.target.value)}
                 />
               </div>
-              {/* Wereda + house number moved to private staff_addresses table */}
               <div className="space-y-1.5">
                 <Label htmlFor="wereda">Wereda</Label>
                 <Input
@@ -486,12 +486,11 @@ function ProfilePage() {
           </Card>
         ) : null}
 
-        {role === "staff" && staffProfile.data ? (
+        {role === "staff" && profile?.moybirr_id ? (
           <TipQr
             title="My tip QR code"
             description="Show this to guests — they scan it, pay the bill and 100% of the tip lands in your wallet."
-            hotelId={staffProfile.data.hotel_id}
-            staffId={staffProfile.data.id}
+            staffCode={profile.moybirr_id}
           />
         ) : null}
 
