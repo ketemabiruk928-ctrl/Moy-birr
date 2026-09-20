@@ -49,15 +49,24 @@ const tipPercents = [5, 10, 15];
 /**
  * Parse a QR code value into a hotel or staff identifier.
  *
- * Accepts:
- *   https://moy-birr.vercel.app/staff/<uuid>          → { staff: uuid }
- *   https://moy-birr.vercel.app/h/MH-000001           → { hotel: MH-000001 }
- *   https://moy-birr.vercel.app/pay?hotel=X&staff=Y   → legacy
- *   moybirr://pay/staff/<uuid>                         → legacy
- *   moybirr://pay/hotel/<uuid>                         → legacy
- *   <raw uuid>                                         → assume hotel uuid
+ * Accepts (in priority order):
+ *   https://moy-birr.vercel.app/c/MS-000042  → { staff: MS-000042 }
+ *   https://moy-birr.vercel.app/c/MH-000001  → { hotel: MH-000001 }
+ *   https://moy-birr.vercel.app/c/MG-xxxxx   → { person: MG-xxxxx } (not payable)
+ *   https://moy-birr.vercel.app/c/MO-xxxxx   → { person: MO-xxxxx } (not payable)
+ *   /staff/<uuid>                             → legacy staff
+ *   /h/<code-or-uuid>                         → legacy hotel
+ *   ?hotel=X&staff=Y                          → very legacy
+ *   moybirr://...                             → very legacy
+ *   <raw uuid>                                → assume hotel uuid
  */
-function parseQrValue(raw: string): { hotel?: string; staff?: string } | null {
+type ParsedQr =
+  | { kind: "staff"; code: string }
+  | { kind: "hotel"; code: string }
+  | { kind: "person"; code: string } // guest or owner — not payable
+  | null;
+
+function parseQrValue(raw: string): ParsedQr {
   const text = raw.trim();
   if (!text) return null;
 
@@ -66,18 +75,30 @@ function parseQrValue(raw: string): { hotel?: string; staff?: string } | null {
     const url = new URL(text);
     const path = url.pathname.replace(/\/+$/, ""); // strip trailing slashes
 
-    // /staff/<uuid>
+    // New unified format: /c/<MG|MO|MS|MH>-000123
+    const cMatch = path.match(/\/c\/([A-Za-z]{2}-\d+)$/);
+    if (cMatch) {
+      const code = cMatch[1].toUpperCase();
+      const prefix = code.slice(0, 2);
+      if (prefix === "MS") return { kind: "staff", code };
+      if (prefix === "MH") return { kind: "hotel", code };
+      if (prefix === "MG" || prefix === "MO") return { kind: "person", code };
+      return null;
+    }
+
+    // Legacy: /staff/<uuid>
     const staffMatch = path.match(/\/staff\/([^/]+)$/);
-    if (staffMatch) return { staff: staffMatch[1] };
+    if (staffMatch) return { kind: "staff", code: staffMatch[1] };
 
-    // /h/<code-or-uuid>
+    // Legacy: /h/<code-or-uuid>
     const hotelMatch = path.match(/\/h\/([^/]+)$/);
-    if (hotelMatch) return { hotel: hotelMatch[1] };
+    if (hotelMatch) return { kind: "hotel", code: hotelMatch[1] };
 
-    // legacy: ?hotel=...&staff=...
+    // Very legacy: ?hotel=...&staff=...
     const hotel = url.searchParams.get("hotel") ?? undefined;
     const staff = url.searchParams.get("staff") ?? undefined;
-    if (hotel || staff) return { ...(hotel ? { hotel } : {}), ...(staff ? { staff } : {}) };
+    if (staff) return { kind: "staff", code: staff };
+    if (hotel) return { kind: "hotel", code: hotel };
   } catch {
     /* not a URL */
   }
@@ -86,10 +107,12 @@ function parseQrValue(raw: string): { hotel?: string; staff?: string } | null {
   const uuid = text.match(
     /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
   );
-  if (uuid) return { hotel: uuid[0] };
+  if (uuid) return { kind: "hotel", code: uuid[0] };
 
-  // Bare hotel code → e.g. "MH-000001"
-  if (/^MH-\d+$/i.test(text)) return { hotel: text.toUpperCase() };
+  // Bare hotel code
+  if (/^MH-\d+$/i.test(text)) return { kind: "hotel", code: text.toUpperCase() };
+  // Bare staff code
+  if (/^MS-\d+$/i.test(text)) return { kind: "staff", code: text.toUpperCase() };
 
   return null;
 }
@@ -113,7 +136,6 @@ function PayPage() {
 
   const { coords, status, locate } = useMyLocation();
 
-  // Hotel list for the search dropdown — from the public view (no owner_id, no qr_code).
   const hotels = useQuery({
     queryKey: ["hotels-public"],
     queryFn: async () => {
@@ -126,8 +148,6 @@ function PayPage() {
     },
   });
 
-  // Staff list for the selected hotel — from the public view.
-  // Only name, position, rating are exposed by the view — no phone, no GPS.
   const staff = useQuery({
     queryKey: ["staff-public", hotelId],
     enabled: !!hotelId,
@@ -220,37 +240,66 @@ function PayPage() {
       return;
     }
 
-    // Staff QR scanned first — apply staff, then resolve their hotel.
-    if (parsed.staff) {
-      setStaffId(parsed.staff);
-      // Look up which hotel this staff works at so the hotel field fills in.
-      const { data: staffRow, error: staffErr } = await supabase
-        .from("staff_public")
-        .select("hotel_id,full_name")
-        .eq("id", parsed.staff)
-        .maybeSingle();
-      if (staffErr) {
-        toast.error("Could not load that staff member");
-        return;
-      }
-      if (staffRow?.hotel_id) {
-        setHotelId(staffRow.hotel_id);
-        setShowHotelSearch(false);
-        if (staffRow.full_name) setStaffName(staffRow.full_name);
-      }
-      toast.success(`Staff QR scanned — enter the bill for ${staffRow?.full_name ?? "staff"}`);
+    // Guest or owner personal QR — not a payment target.
+    if (parsed.kind === "person") {
+      toast.info(
+        `${parsed.code} is a Moybirr account, not a payment point. Ask them for their phone number instead.`,
+      );
       return;
     }
 
-    // Hotel QR — could be a hotel code (MH-000001) or a UUID.
-    if (parsed.hotel) {
-      const value = parsed.hotel;
-      // If it looks like a UUID, it's already the internal id.
+    // Staff QR — look up the staff and their hotel.
+    if (parsed.kind === "staff") {
+      const code = parsed.code;
+      const isUuid = /^[0-9a-f]{8}-/i.test(code);
+
+      let staffRow: {
+        id: string;
+        hotel_id: string | null;
+        full_name: string | null;
+      } | null = null;
+
+      if (isUuid) {
+        const { data, error } = await supabase
+          .from("staff_public")
+          .select("id,hotel_id,full_name")
+          .eq("id", code)
+          .maybeSingle();
+        if (error || !data) {
+          toast.error("Staff not found");
+          return;
+        }
+        staffRow = data;
+      } else {
+        const { data, error } = await supabase
+          .from("staff_public")
+          .select("id,hotel_id,full_name")
+          .eq("moybirr_id", code.toUpperCase())
+          .maybeSingle();
+        if (error || !data) {
+          toast.error("Staff not found");
+          return;
+        }
+        staffRow = data;
+      }
+
+      setStaffId(staffRow.id);
+      if (staffRow.hotel_id) setHotelId(staffRow.hotel_id);
+      setShowHotelSearch(false);
+      if (staffRow.full_name) setStaffName(staffRow.full_name);
+
+      toast.success(`Staff QR scanned — enter the bill for ${staffRow.full_name ?? "staff"}`);
+      return;
+    }
+
+    // Hotel QR — resolve the internal hotel id.
+    if (parsed.kind === "hotel") {
+      const value = parsed.code;
       const isUuid = /^[0-9a-f]{8}-/i.test(value);
+
       if (isUuid) {
         setHotelId(value);
       } else {
-        // Hotel code — look up the internal id.
         const { data: hotelRow, error: hotelErr } = await supabase
           .from("hotels_public")
           .select("id,name")
