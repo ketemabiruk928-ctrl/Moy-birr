@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { QrScanButton } from "@/components/QrScanner";
-import { distanceKm, formatDistance, useMyLocation } from "@/lib/geo";
+import { useMyLocation } from "@/lib/geo";
 
 export const Route = createFileRoute("/pay")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -49,31 +49,27 @@ const tipPercents = [5, 10, 15];
 /**
  * Parse a QR code value into a hotel or staff identifier.
  *
- * Accepts (in priority order):
- *   https://moy-birr.vercel.app/c/MS-000042  → { staff: MS-000042 }
- *   https://moy-birr.vercel.app/c/MH-000001  → { hotel: MH-000001 }
- *   https://moy-birr.vercel.app/c/MG-xxxxx   → { person: MG-xxxxx } (not payable)
- *   https://moy-birr.vercel.app/c/MO-xxxxx   → { person: MO-xxxxx } (not payable)
- *   /staff/<uuid>                             → legacy staff
- *   /h/<code-or-uuid>                         → legacy hotel
- *   ?hotel=X&staff=Y                          → very legacy
- *   moybirr://...                             → very legacy
- *   <raw uuid>                                → assume hotel uuid
+ * Accepted formats:
+ *   https://moy-birr.vercel.app/c/MH-000001   → hotel (redirect to /c/)
+ *   https://moy-birr.vercel.app/c/MS-000042   → staff (in-app only)
+ *   https://moy-birr.vercel.app/c/MG-000123   → guest (no payment)
+ *   https://moy-birr.vercel.app/c/MO-000045   → owner (no payment)
+ *   /staff/<uuid>, /h/<code>, ?hotel=X&staff=Y → legacy
+ *   <raw uuid>                                 → assume hotel
  */
 type ParsedQr =
-  | { kind: "staff"; code: string }
   | { kind: "hotel"; code: string }
-  | { kind: "person"; code: string } // guest or owner — not payable
+  | { kind: "staff"; code: string }
+  | { kind: "person"; code: string }
   | null;
 
 function parseQrValue(raw: string): ParsedQr {
   const text = raw.trim();
   if (!text) return null;
 
-  // Try URL parse first (covers https:// and moybirr://)
   try {
     const url = new URL(text);
-    const path = url.pathname.replace(/\/+$/, ""); // strip trailing slashes
+    const path = url.pathname.replace(/\/+$/, "");
 
     // New unified format: /c/<MG|MO|MS|MH>-000123
     const cMatch = path.match(/\/c\/([A-Za-z]{2}-\d+)$/);
@@ -86,15 +82,13 @@ function parseQrValue(raw: string): ParsedQr {
       return null;
     }
 
-    // Legacy: /staff/<uuid>
+    // Legacy routes
     const staffMatch = path.match(/\/staff\/([^/]+)$/);
     if (staffMatch) return { kind: "staff", code: staffMatch[1] };
 
-    // Legacy: /h/<code-or-uuid>
     const hotelMatch = path.match(/\/h\/([^/]+)$/);
     if (hotelMatch) return { kind: "hotel", code: hotelMatch[1] };
 
-    // Very legacy: ?hotel=...&staff=...
     const hotel = url.searchParams.get("hotel") ?? undefined;
     const staff = url.searchParams.get("staff") ?? undefined;
     if (staff) return { kind: "staff", code: staff };
@@ -109,9 +103,7 @@ function parseQrValue(raw: string): ParsedQr {
   );
   if (uuid) return { kind: "hotel", code: uuid[0] };
 
-  // Bare hotel code
   if (/^MH-\d+$/i.test(text)) return { kind: "hotel", code: text.toUpperCase() };
-  // Bare staff code
   if (/^MS-\d+$/i.test(text)) return { kind: "staff", code: text.toUpperCase() };
 
   return null;
@@ -134,7 +126,7 @@ function PayPage() {
   const [hotelStars, setHotelStars] = useState(0);
   const [hotelComment, setHotelComment] = useState("");
 
-  const { coords, status, locate } = useMyLocation();
+  const { status, locate } = useMyLocation();
 
   const hotels = useQuery({
     queryKey: ["hotels-public"],
@@ -227,8 +219,6 @@ function PayPage() {
       void qc.invalidateQueries({ queryKey: ["wallet"] });
       void qc.invalidateQueries({ queryKey: ["transactions"] });
       void qc.invalidateQueries({ queryKey: ["staff-public"] });
-      void qc.invalidateQueries({ queryKey: ["owner-hotel-ratings"] });
-      void qc.invalidateQueries({ queryKey: ["hotel-ratings"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -240,15 +230,37 @@ function PayPage() {
       return;
     }
 
-    // Guest or owner personal QR — not a payment target.
+    // Hotel QR → always redirect to the standalone payment page. That page
+    // has no bottom nav and works for both logged-in and logged-out users.
+    if (parsed.kind === "hotel") {
+      // If it's an MH- code, redirect to /c/MH-...
+      if (/^MH-/i.test(parsed.code)) {
+        window.location.href = `/c/${parsed.code.toUpperCase()}`;
+        return;
+      }
+      // Otherwise it's a UUID — look up the code and redirect.
+      const { data } = await supabase
+        .from("hotels_public")
+        .select("hotel_code")
+        .eq("id", parsed.code)
+        .maybeSingle();
+      if (data?.hotel_code) {
+        window.location.href = `/c/${data.hotel_code.toUpperCase()}`;
+        return;
+      }
+      toast.error("Hotel not found");
+      return;
+    }
+
+    // Person QR (guest or owner) — not a payment target.
     if (parsed.kind === "person") {
       toast.info(
-        `${parsed.code} is a Moybirr account, not a payment point. Ask them for their phone number instead.`,
+        `${parsed.code} is a Moybirr account, not a payment point.`,
       );
       return;
     }
 
-    // Staff QR — look up the staff and their hotel.
+    // Staff QR — prefills the tip form on this page.
     if (parsed.kind === "staff") {
       const code = parsed.code;
       const isUuid = /^[0-9a-f]{8}-/i.test(code);
@@ -260,61 +272,31 @@ function PayPage() {
       } | null = null;
 
       if (isUuid) {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("staff_public")
           .select("id,hotel_id,full_name")
           .eq("id", code)
           .maybeSingle();
-        if (error || !data) {
-          toast.error("Staff not found");
-          return;
-        }
         staffRow = data;
       } else {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("staff_public")
           .select("id,hotel_id,full_name")
           .eq("moybirr_id", code.toUpperCase())
           .maybeSingle();
-        if (error || !data) {
-          toast.error("Staff not found");
-          return;
-        }
         staffRow = data;
+      }
+
+      if (!staffRow) {
+        toast.error("Staff not found");
+        return;
       }
 
       setStaffId(staffRow.id);
       if (staffRow.hotel_id) setHotelId(staffRow.hotel_id);
       setShowHotelSearch(false);
       if (staffRow.full_name) setStaffName(staffRow.full_name);
-
       toast.success(`Staff QR scanned — enter the bill for ${staffRow.full_name ?? "staff"}`);
-      return;
-    }
-
-    // Hotel QR — resolve the internal hotel id.
-    if (parsed.kind === "hotel") {
-      const value = parsed.code;
-      const isUuid = /^[0-9a-f]{8}-/i.test(value);
-
-      if (isUuid) {
-        setHotelId(value);
-      } else {
-        const { data: hotelRow, error: hotelErr } = await supabase
-          .from("hotels_public")
-          .select("id,name")
-          .eq("hotel_code", value.toUpperCase())
-          .maybeSingle();
-        if (hotelErr || !hotelRow) {
-          toast.error("Hotel not found");
-          return;
-        }
-        setHotelId(hotelRow.id);
-      }
-      setStaffId(null);
-      setStaffName("");
-      setShowHotelSearch(false);
-      toast.success("Hotel QR scanned");
     }
   };
 
@@ -322,11 +304,10 @@ function PayPage() {
 
   const hotelResults = (() => {
     const q = hotelQuery.trim().toLowerCase();
-    const rows = (hotels.data ?? [])
-      .filter(
-        (h) =>
-          !q || h.name.toLowerCase().includes(q) || (h.city ?? "").toLowerCase().includes(q),
-      );
+    const rows = (hotels.data ?? []).filter(
+      (h) =>
+        !q || h.name.toLowerCase().includes(q) || (h.city ?? "").toLowerCase().includes(q),
+    );
     return rows.slice(0, 6);
   })();
 
@@ -336,7 +317,8 @@ function PayPage() {
       if (!q) return true;
       return (
         (s.full_name ?? "").toLowerCase().includes(q) ||
-        (s.position ?? "").toLowerCase().includes(q)
+        (s.position ?? "").toLowerCase().includes(q) ||
+        (s.moybirr_id ?? "").toLowerCase().includes(q)
       );
     });
   })();
@@ -489,19 +471,19 @@ function PayPage() {
           </div>
 
           <div className="mt-5 space-y-2">
-            <Label htmlFor="staff-name">{t("staff_name")}</Label>
+            <Label htmlFor="staff-name">Staff Moybirr ID or name</Label>
             <Input
               id="staff-name"
               value={staffName}
-              onChange={(e) => setStaffName(e.target.value)}
-              placeholder="e.g. Selam T. — waiter"
+              onChange={(e) => setStaffName(e.target.value.toUpperCase())}
+              placeholder="MS-000042 or Helen T."
             />
             <div className="grid gap-2">
               {staffResults.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {(staff.data ?? []).length === 0
                     ? "No staff registered for this place yet."
-                    : "No staff matches that name."}
+                    : "No staff matches that ID or name."}
                 </p>
               ) : (
                 staffResults.map((s) => (
@@ -509,7 +491,7 @@ function PayPage() {
                     key={s.id}
                     onClick={() => {
                       setStaffId(s.id);
-                      setStaffName(s.full_name || "Staff member");
+                      setStaffName(s.moybirr_id ?? s.full_name ?? "Staff member");
                     }}
                     className={`flex items-center justify-between rounded-xl border p-3 text-left ${
                       staffId === s.id ? "border-primary bg-accent" : "border-border"
@@ -519,8 +501,8 @@ function PayPage() {
                       <span className="text-sm font-medium">
                         {s.full_name || "Staff member"}
                       </span>
-                      <span className="block text-xs text-muted-foreground capitalize">
-                        {s.position}
+                      <span className="block font-mono text-xs text-muted-foreground">
+                        {s.moybirr_id}
                       </span>
                     </span>
                     <span className="flex items-center gap-1 text-xs font-semibold">
