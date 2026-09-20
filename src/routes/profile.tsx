@@ -208,9 +208,11 @@ function ProfilePage() {
       <AppHeader
         title={t("profile")}
         subtitle={
-          profile?.moybirr_id
-            ? profile.moybirr_id + (profile?.phone ? " · " + profile.phone : "")
-            : (profile?.phone ?? "")
+          role === "staff" && employment !== "active"
+            ? "Pending hotel approval"
+            : profile?.moybirr_id
+              ? profile.moybirr_id + (profile?.phone ? " · " + profile.phone : "")
+              : (profile?.phone ?? "")
         }
       />
 
@@ -298,8 +300,7 @@ function ProfilePage() {
           </Button>
         </Card>
 
-        {/* Guest "My QR" — shows on the account's own profile so guests can
-            share the code that leads to their /c/MG-xxxxx public card. */}
+        {/* Guest QR — shows on own profile so guests can share their code. */}
         {role === "guest" && profile?.moybirr_id ? (
           <TipQr
             title="My Moybirr QR code"
@@ -328,6 +329,12 @@ function ProfilePage() {
                   <Badge variant="secondary" className="mt-2">
                     Approved · you can receive tips
                   </Badge>
+                  {profile?.moybirr_id ? (
+                    <p className="mt-2 flex items-center gap-1 font-mono text-xs text-muted-foreground">
+                      <IdCard className="size-3.5" />
+                      {profile.moybirr_id}
+                    </p>
+                  ) : null}
                 </>
               ) : employment === "pending" ? (
                 <>
@@ -335,7 +342,7 @@ function ProfilePage() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     You asked to join{" "}
                     {staffProfile.data?.workplace_hotel_name ?? "a hotel"}. Your owner has to
-                    approve you before guests can tip you there.
+                    approve you before you can receive tips and get your staff QR code.
                   </p>
                 </>
               ) : (
@@ -475,7 +482,7 @@ function ProfilePage() {
               Save + update with my GPS location
             </Button>
 
-            {staffProfile.data?.lat ? (
+            {staffProfile.data?.lat && employment === "active" ? (
               <p className="text-xs text-muted-foreground">
                 <MapPin className="mr-1 inline size-3" />
                 {Number(staffProfile.data.lat).toFixed(3)},{" "}
@@ -486,7 +493,10 @@ function ProfilePage() {
           </Card>
         ) : null}
 
-        {role === "staff" && profile?.moybirr_id ? (
+        {/* Staff QR — only after the owner approves them. */}
+        {role === "staff" &&
+        profile?.moybirr_id &&
+        staffProfile.data?.employment_status === "active" ? (
           <TipQr
             title="My tip QR code"
             description="Show this to guests — they scan it, pay the bill and 100% of the tip lands in your wallet."
