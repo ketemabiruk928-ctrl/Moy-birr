@@ -70,7 +70,6 @@ function OwnerPage() {
   const { user, role } = useAuth();
   const qc = useQueryClient();
 
-  // ─── Hotel ─────────────────────────────────────────────────────────
   const hotel = useQuery({
     queryKey: ["my-hotel", user?.id],
     enabled: !!user,
@@ -87,7 +86,6 @@ function OwnerPage() {
 
   const hotelId = hotel.data?.id ?? null;
 
-  // ─── Plan (source of truth = DB function, not subscriptions table) ──
   const plan = useQuery({
     queryKey: ["owner-plan", hotelId],
     enabled: !!hotelId,
@@ -101,7 +99,6 @@ function OwnerPage() {
   });
   const premiumActive = plan.data === true;
 
-  // ─── Bookings ──────────────────────────────────────────────────────
   const bookings = useQuery({
     queryKey: ["owner-bookings", hotelId],
     enabled: !!hotelId,
@@ -116,7 +113,6 @@ function OwnerPage() {
     },
   });
 
-  // ─── Staff ─────────────────────────────────────────────────────────
   const staff = useQuery({
     queryKey: ["owner-staff", hotelId],
     enabled: !!hotelId,
@@ -156,7 +152,6 @@ function OwnerPage() {
   const pendingStaff = (staff.data ?? []).filter((s) => s.employment_status === "pending");
   const activeStaff = (staff.data ?? []).filter((s) => s.employment_status === "active");
 
-  // ─── Hotel reviews ─────────────────────────────────────────────────
   const hotelRatings = useQuery({
     queryKey: ["owner-hotel-ratings", hotelId],
     enabled: !!hotelId,
@@ -172,7 +167,6 @@ function OwnerPage() {
     },
   });
 
-  // ─── Jobs ──────────────────────────────────────────────────────────
   const myJobs = useQuery({
     queryKey: ["owner-jobs", hotelId],
     enabled: !!hotelId,
@@ -187,7 +181,6 @@ function OwnerPage() {
     },
   });
 
-  // ─── Performance (replaces the broken all-tips query) ──────────────
   const performance = useQuery({
     queryKey: ["owner-summary", hotelId],
     enabled: !!hotelId,
@@ -214,7 +207,6 @@ function OwnerPage() {
     },
   });
 
-  // ─── Subscribe ─────────────────────────────────────────────────────
   const subscribe = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.rpc("subscribe_premium");
@@ -230,7 +222,6 @@ function OwnerPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // ─── Role gate (waits for useAuth to finish resolving) ─────────────
   if (role === null) {
     return (
       <>
@@ -257,7 +248,6 @@ function OwnerPage() {
     );
   }
 
-  // ─── Derived stats ─────────────────────────────────────────────────
   const confirmed = (bookings.data ?? []).filter((b) => b.status === "confirmed");
   const roomRevenue = confirmed.reduce((s, b) => s + Number(b.total), 0);
   const occupancy = confirmed.filter((b) => new Date(b.check_out) >= new Date()).length;
@@ -280,7 +270,6 @@ function OwnerPage() {
       ) : null}
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
-        {/* Plan card */}
         <Card className="shadow-card flex items-center justify-between gap-3 p-4">
           <div>
             <p className="flex items-center gap-1.5 text-sm font-semibold">
@@ -315,7 +304,6 @@ function OwnerPage() {
           </Card>
         ) : null}
 
-        {/* Stats */}
         {hotelId ? (
           <div className="grid grid-cols-2 gap-3">
             <Stat
@@ -341,7 +329,6 @@ function OwnerPage() {
           </div>
         ) : null}
 
-        {/* Tabs */}
         <Tabs defaultValue={hotelId ? "bookings" : "property"}>
           <TabsList className="w-full justify-start overflow-x-auto">
             <TabsTrigger value="property">Property</TabsTrigger>
@@ -358,11 +345,11 @@ function OwnerPage() {
 
           <TabsContent value="property" className="mt-3 space-y-3">
             <PropertyForm hotel={hotel.data ?? null} />
-            {hotelId ? (
+            {hotelId && hotel.data?.hotel_code ? (
               <TipQr
                 title="Table QR code"
                 description="Print this for your tables and reception. Guests scan it to pay the bill and tip your staff."
-                hotelId={hotelId}
+                hotelCode={hotel.data.hotel_code}
               />
             ) : null}
           </TabsContent>
