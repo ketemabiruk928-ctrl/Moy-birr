@@ -6,48 +6,46 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 /**
- * Build the link that goes into a QR code.
+ * Build the URL encoded in a QR code.
  *
- * - When only a hotel is given, the QR opens the public hotel page.
- * - When a staff member is given, the QR opens that staff member's public
- *   page, which shows only: name, Moybirr ID, position, hotel, rating.
- * - No phone, GPS, or other private data is ever encoded or shown.
+ * All QRs point at /c/<code>, where <code> is the Moybirr ID:
+ *   guest  → MG-000123
+ *   owner  → MO-000045
+ *   staff  → MS-000042
+ *   hotel  → MH-000001
+ *
+ * The /c/$code page shows only safe info per role. Never phone numbers,
+ * GPS, or wallet data.
  */
 export function buildPayLink({
-  hotelId,
-  staffId,
+  hotelCode,
+  staffCode,
   origin,
 }: {
-  hotelId?: string | null | undefined;
-  staffId?: string | null | undefined;
+  hotelCode?: string | null | undefined;
+  staffCode?: string | null | undefined;
   origin: string;
 }) {
-  // Prefer the staff page when a staff member is given — that's the tip QR.
-  if (staffId) {
-    return `${origin}/staff/${staffId}`;
-  }
-  if (hotelId) {
-    return `${origin}/h/${hotelId}`;
-  }
-  // Fallback: send people to the app so they can sign in and choose.
+  if (staffCode) return `${origin}/c/${staffCode}`;
+  if (hotelCode) return `${origin}/c/${hotelCode}`;
   return `${origin}/`;
 }
 
 export function TipQr({
   title,
   description,
-  hotelId,
-  staffId,
+  hotelCode,
+  staffCode,
 }: {
   title: string;
   description: string;
-  hotelId?: string | null | undefined;
-  staffId?: string | null | undefined;
+  hotelCode?: string | null | undefined;
+  staffCode?: string | null | undefined;
 }) {
   const [origin] = useState(() =>
     typeof window !== "undefined" ? window.location.origin : "https://moy-birr.vercel.app",
   );
-  const link = buildPayLink({ hotelId, staffId, origin });
+  const link = buildPayLink({ hotelCode, staffCode, origin });
 
   const copy = async () => {
     try {
