@@ -52,7 +52,6 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
-// Turn whatever shape the API returned into a string we can show a user.
 function errorText(json: unknown, fallback: string): string {
   if (!json || typeof json !== "object") return fallback;
   const raw = (json as { error?: unknown }).error;
@@ -74,6 +73,7 @@ const typeMeta: Record<string, { label: string; icon: typeof Send; tone: string 
   refund: { label: "Refund", icon: ArrowDownLeft, tone: "text-success" },
   job_fee: { label: "Job posting fee", icon: Banknote, tone: "text-destructive" },
   subscription: { label: "Premium subscription", icon: Banknote, tone: "text-destructive" },
+  platform_fee: { label: "Platform fee", icon: Banknote, tone: "text-muted-foreground" },
 };
 
 function HomePage() {
@@ -251,10 +251,6 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
 
   const m = useMutation({
     mutationFn: async () => {
-      // Always read the newest session directly from Supabase, not from the
-      // React auth context. The context can lag behind a fresh login or a
-      // token refresh, which makes the server see an empty/expired bearer
-      // token and reply 401 Unauthorized.
       const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
       if (sessionErr || !sessionData.session?.access_token) {
         throw new Error("Not signed in. Please log out and log back in.");
@@ -278,8 +274,6 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
     },
     onSuccess: (checkoutUrl) => {
       setOpen(false);
-      // Hand off to Chapa's hosted checkout. Chapa collects Telebirr, CBE,
-      // or card details on their own page - we never see them.
       window.location.href = checkoutUrl;
     },
     onError: (e: Error) => toast.error(e.message),
@@ -318,224 +312,4 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
             {m.isPending ? "Redirecting..." : t("confirm")}
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function SendDialog({ onDone }: { onDone: () => void }) {
-  const { t } = useLang();
-  const [open, setOpen] = useState(false);
-  const [amount, setAmount] = useState("");
-  const [phone, setPhone] = useState("");
-  const [note, setNote] = useState("");
-
-  const m = useMutation({
-    mutationFn: async () => {
-      const digits = phone.replace(/\D/g, "");
-      const normalized = digits.startsWith("251")
-        ? `+${digits}`
-        : `+251${digits.replace(/^0/, "")}`;
-      const { error } = await supabase.rpc("wallet_transfer", {
-        _phone: normalized,
-        _amount: Number(amount),
-        _note: note || "Transfer",
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success(`Sent ${formatETB(amount)} · SMS notification sent`);
-      setOpen(false);
-      setAmount("");
-      onDone();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <button>
-          <ActionTile icon={Send} label={t("send")} />
-        </button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("send")}</DialogTitle>
-          <DialogDescription>Send money to any Moybirr user by phone number.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="sphone">{t("phone")}</Label>
-            <Input
-              id="sphone"
-              inputMode="tel"
-              placeholder="09xx xxx xxx"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="samt">{t("amount")}</Label>
-            <Input
-              id="samt"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="snote">Note</Label>
-            <Input id="snote" value={note} onChange={(e) => setNote(e.target.value)} />
-          </div>
-          <Button
-            className="w-full"
-            size="lg"
-            disabled={m.isPending || !amount || !phone}
-            onClick={() => m.mutate()}
-          >
-            {t("confirm")}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function WithdrawDialog({ onDone }: { onDone: () => void }) {
-  const { t } = useLang();
-  const [open, setOpen] = useState(false);
-  const [amount, setAmount] = useState("");
-  const [bankCode, setBankCode] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
-  const [accountName, setAccountName] = useState("");
-
-  const banksQuery = useQuery({
-    queryKey: ["chapa-banks"],
-    enabled: open,
-    queryFn: async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) throw new Error("Not signed in");
-      const res = await fetch("/api/chapa/banks", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = await res.json().catch(() => ({}));
-      const banks = (json as { banks?: { code: string; name: string }[] }).banks;
-      if (!res.ok || !banks) {
-        throw new Error(errorText(json, `Could not load banks (${res.status})`));
-      }
-      return banks;
-    },
-  });
-
-  const m = useMutation({
-    mutationFn: async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) throw new Error("Not signed in. Please log out and log back in.");
-      const res = await fetch("/api/chapa/withdraw", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          amount: Number(amount),
-          bank_code: bankCode,
-          account_number: accountNumber,
-          account_name: accountName,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errorText(json, `Withdrawal failed (${res.status})`));
-    },
-    onSuccess: () => {
-      toast.success("Withdrawal sent — it'll land in a few minutes");
-      setOpen(false);
-      setAmount("");
-      setAccountNumber("");
-      setAccountName("");
-      onDone();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const canSubmit = !!amount && !!bankCode && !!accountNumber && !!accountName;
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <button>
-          <ActionTile icon={ArrowUpRight} label={t("withdraw")} />
-        </button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("withdraw")}</DialogTitle>
-          <DialogDescription>
-            Sent as a real bank transfer. Double-check the account details — we can't reverse a transfer sent to the wrong account.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="wbank">Bank</Label>
-            <select
-              id="wbank"
-              className="w-full rounded-md border border-border bg-background p-2 text-sm"
-              value={bankCode}
-              onChange={(e) => setBankCode(e.target.value)}
-            >
-              <option value="">
-                {banksQuery.isLoading ? "Loading banks..." : "Select a bank"}
-              </option>
-              {banksQuery.data?.map((b) => (
-                <option key={b.code} value={b.code}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-            {banksQuery.isError ? (
-              <p className="text-xs text-destructive">
-                {(banksQuery.error as Error).message}
-              </p>
-            ) : null}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="wacct">Account number</Label>
-            <Input
-              id="wacct"
-              value={accountNumber}
-              onChange={(e) => setAccountNumber(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="wname">Account holder name</Label>
-            <Input
-              id="wname"
-              value={accountName}
-              onChange={(e) => setAccountName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="wamt">{t("amount")}</Label>
-            <Input
-              id="wamt"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </div>
-          <Button
-            className="w-full"
-            size="lg"
-            disabled={m.isPending || !canSubmit}
-            onClick={() => m.mutate()}
-          >
-            {m.isPending ? "Sending..." : t("confirm")}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
+      </Dialog
