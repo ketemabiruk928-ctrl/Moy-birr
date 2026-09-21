@@ -312,4 +312,224 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
             {m.isPending ? "Redirecting..." : t("confirm")}
           </Button>
         </div>
-      </Dialog
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SendDialog({ onDone }: { onDone: () => void }) {
+  const { t } = useLang();
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [recipient, setRecipient] = useState("");
+  const [note, setNote] = useState("");
+
+  const m = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc("wallet_transfer", {
+        _recipient: recipient.trim(),
+        _amount: Number(amount),
+        _note: note || "Transfer",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(`Sent ${formatETB(amount)} · SMS notification sent`);
+      setOpen(false);
+      setAmount("");
+      setRecipient("");
+      setNote("");
+      onDone();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <button>
+          <ActionTile icon={Send} label={t("send")} />
+        </button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("send")}</DialogTitle>
+          <DialogDescription>
+            Send money to any Moybirr user by Moybirr ID or phone number.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="srecipient">Moybirr ID or phone number</Label>
+            <Input
+              id="srecipient"
+              inputMode="text"
+              placeholder="MS-000042 or 0912 345 678"
+              value={recipient}
+              onChange={(e) => setRecipient(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="samt">{t("amount")}</Label>
+            <Input
+              id="samt"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="snote">Note</Label>
+            <Input id="snote" value={note} onChange={(e) => setNote(e.target.value)} />
+          </div>
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={m.isPending || !amount || !recipient}
+            onClick={() => m.mutate()}
+          >
+            {t("confirm")}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WithdrawDialog({ onDone }: { onDone: () => void }) {
+  const { t } = useLang();
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [bankCode, setBankCode] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountName, setAccountName] = useState("");
+
+  const banksQuery = useQuery({
+    queryKey: ["chapa-banks"],
+    enabled: open,
+    queryFn: async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Not signed in");
+      const res = await fetch("/api/chapa/banks", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      const banks = (json as { banks?: { code: string; name: string }[] }).banks;
+      if (!res.ok || !banks) {
+        throw new Error(errorText(json, `Could not load banks (${res.status})`));
+      }
+      return banks;
+    },
+  });
+
+  const m = useMutation({
+    mutationFn: async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Not signed in. Please log out and log back in.");
+      const res = await fetch("/api/chapa/withdraw", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: Number(amount),
+          bank_code: bankCode,
+          account_number: accountNumber,
+          account_name: accountName,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(errorText(json, `Withdrawal failed (${res.status})`));
+    },
+    onSuccess: () => {
+      toast.success("Withdrawal sent — it'll land in a few minutes");
+      setOpen(false);
+      setAmount("");
+      setAccountNumber("");
+      setAccountName("");
+      onDone();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const canSubmit = !!amount && !!bankCode && !!accountNumber && !!accountName;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <button>
+          <ActionTile icon={ArrowUpRight} label={t("withdraw")} />
+        </button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("withdraw")}</DialogTitle>
+          <DialogDescription>
+            Sent as a real bank transfer. Double-check the account details — we can't reverse a transfer sent to the wrong account.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="wbank">Bank</Label>
+            <select
+              id="wbank"
+              className="w-full rounded-md border border-border bg-background p-2 text-sm"
+              value={bankCode}
+              onChange={(e) => setBankCode(e.target.value)}
+            >
+              <option value="">
+                {banksQuery.isLoading ? "Loading banks..." : "Select a bank"}
+              </option>
+              {banksQuery.data?.map((b) => (
+                <option key={b.code} value={b.code}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            {banksQuery.isError ? (
+              <p className="text-xs text-destructive">
+                {(banksQuery.error as Error).message}
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="wacct">Account number</Label>
+            <Input
+              id="wacct"
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="wname">Account holder name</Label>
+            <Input
+              id="wname"
+              value={accountName}
+              onChange={(e) => setAccountName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="wamt">{t("amount")}</Label>
+            <Input
+              id="wamt"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </div>
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={m.isPending || !canSubmit}
+            onClick={() => m.mutate()}
+          >
+            {m.isPending ? "Sending..." : t("confirm")}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
