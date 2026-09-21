@@ -282,10 +282,14 @@ function PayPage() {
 
   const hotelResults = (() => {
     const q = hotelQuery.trim().toLowerCase();
-    const rows = (hotels.data ?? []).filter(
-      (h) =>
-        !q || h.name.toLowerCase().includes(q) || (h.city ?? "").toLowerCase().includes(q),
-    );
+    const rows = (hotels.data ?? []).filter((h) => {
+      if (!q) return true;
+      return (
+        h.name.toLowerCase().includes(q) ||
+        (h.city ?? "").toLowerCase().includes(q) ||
+        (h.hotel_code ?? "").toLowerCase().includes(q)
+      );
+    });
     return rows.slice(0, 6);
   })();
 
@@ -314,7 +318,7 @@ function PayPage() {
             <div>
               <p className="text-sm font-semibold">Scan the table QR code</p>
               <p className="text-xs text-muted-foreground">
-                Point your camera at the hotel QR, or pick the place below.
+                Point your camera at the hotel QR, or type the hotel code (MH-000001) below.
               </p>
             </div>
           </div>
@@ -370,11 +374,11 @@ function PayPage() {
                     className="pl-9"
                     value={hotelQuery}
                     onChange={(e) => setHotelQuery(e.target.value)}
-                    placeholder={t("search_hotel")}
+                    placeholder="Name or code (e.g. MH-000001)"
                   />
                 </div>
                 {hotelResults.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No place matches that name.</p>
+                  <p className="text-xs text-muted-foreground">No place matches that name or code.</p>
                 ) : (
                   <div className="grid gap-2">
                     {hotelResults.map((h) => (
@@ -393,6 +397,11 @@ function PayPage() {
                       >
                         <span className="font-medium">{h.name}</span>
                         <span className="text-muted-foreground"> · {h.city}</span>
+                        {h.hotel_code ? (
+                          <span className="ml-2 font-mono text-xs text-muted-foreground">
+                            {h.hotel_code}
+                          </span>
+                        ) : null}
                       </button>
                     ))}
                   </div>
