@@ -73,7 +73,7 @@ function PublicCardPage() {
 // ─────────────────────────────────────────────────────────────────────────
 
 function HotelPayPage({ code }: { code: string }) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const qc = useQueryClient();
 
   const [bill, setBill] = useState("");
@@ -119,7 +119,6 @@ function HotelPayPage({ code }: { code: string }) {
       });
       if (error) throw error;
 
-      // Rate the staff, only if a staff was selected and they got a tip.
       if (staffId && staffStars > 0) {
         await supabase.rpc("rate_staff", {
           _staff_profile_id: staffId,
@@ -129,7 +128,6 @@ function HotelPayPage({ code }: { code: string }) {
         });
       }
 
-      // Rate the hotel, only if the guest gave a rating.
       if (hotelStars > 0 && user) {
         await supabase.from("hotel_ratings").insert({
           guest_id: user.id,
@@ -159,7 +157,6 @@ function HotelPayPage({ code }: { code: string }) {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // When the guest types a Moybirr ID (or name), look it up.
   const lookupStaff = async (input: string) => {
     if (!hotel.data) return;
     const query = input.trim();
@@ -173,7 +170,6 @@ function HotelPayPage({ code }: { code: string }) {
     setLookupBusy(true);
     setStaffLookupError(null);
 
-    // Try by exact Moybirr ID first
     const asId = query.toUpperCase();
     const { data: byId } = await supabase
       .from("staff_public")
@@ -189,7 +185,6 @@ function HotelPayPage({ code }: { code: string }) {
       return;
     }
 
-    // Fall back to a name search
     const { data: byName } = await supabase
       .from("staff_public")
       .select("id, full_name, moybirr_id, position, rating")
@@ -261,7 +256,6 @@ function HotelPayPage({ code }: { code: string }) {
               ) : null}
             </Card>
 
-            {/* Payment form */}
             <Card className="shadow-card space-y-4 p-5">
               <div className="space-y-1.5">
                 <Label htmlFor="bill">
@@ -276,7 +270,6 @@ function HotelPayPage({ code }: { code: string }) {
                 />
               </div>
 
-              {/* Optional tip */}
               <div>
                 <p className="text-sm font-semibold">
                   <Gift className="mr-1.5 inline size-4 text-primary" />
@@ -315,7 +308,6 @@ function HotelPayPage({ code }: { code: string }) {
                 </div>
               </div>
 
-              {/* Staff lookup — only meaningful if the guest wants to tip */}
               <div className="space-y-1.5">
                 <Label htmlFor="staff-id">
                   Staff Moybirr ID{" "}
@@ -346,7 +338,6 @@ function HotelPayPage({ code }: { code: string }) {
                 ) : null}
               </div>
 
-              {/* Staff rating — only if staff selected */}
               {staffId ? (
                 <div className="space-y-1.5">
                   <Label>
@@ -379,7 +370,6 @@ function HotelPayPage({ code }: { code: string }) {
                 </div>
               ) : null}
 
-              {/* Hotel rating + comment — always optional */}
               <div className="space-y-1.5">
                 <Label>
                   Rate this place{" "}
