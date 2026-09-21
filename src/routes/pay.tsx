@@ -46,17 +46,6 @@ export const Route = createFileRoute("/pay")({
 
 const tipPercents = [5, 10, 15];
 
-/**
- * Parse a QR code value into a hotel or staff identifier.
- *
- * Accepted formats:
- *   https://moy-birr.vercel.app/c/MH-000001   → hotel (redirect to /c/)
- *   https://moy-birr.vercel.app/c/MS-000042   → staff (in-app only)
- *   https://moy-birr.vercel.app/c/MG-000123   → guest (no payment)
- *   https://moy-birr.vercel.app/c/MO-000045   → owner (no payment)
- *   /staff/<uuid>, /h/<code>, ?hotel=X&staff=Y → legacy
- *   <raw uuid>                                 → assume hotel
- */
 type ParsedQr =
   | { kind: "hotel"; code: string }
   | { kind: "staff"; code: string }
@@ -71,7 +60,6 @@ function parseQrValue(raw: string): ParsedQr {
     const url = new URL(text);
     const path = url.pathname.replace(/\/+$/, "");
 
-    // New unified format: /c/<MG|MO|MS|MH>-000123
     const cMatch = path.match(/\/c\/([A-Za-z]{2}-\d+)$/);
     if (cMatch) {
       const code = cMatch[1].toUpperCase();
@@ -82,7 +70,6 @@ function parseQrValue(raw: string): ParsedQr {
       return null;
     }
 
-    // Legacy routes
     const staffMatch = path.match(/\/staff\/([^/]+)$/);
     if (staffMatch) return { kind: "staff", code: staffMatch[1] };
 
@@ -97,7 +84,6 @@ function parseQrValue(raw: string): ParsedQr {
     /* not a URL */
   }
 
-  // Bare UUID → assume hotel
   const uuid = text.match(
     /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
   );
@@ -230,15 +216,11 @@ function PayPage() {
       return;
     }
 
-    // Hotel QR → always redirect to the standalone payment page. That page
-    // has no bottom nav and works for both logged-in and logged-out users.
     if (parsed.kind === "hotel") {
-      // If it's an MH- code, redirect to /c/MH-...
       if (/^MH-/i.test(parsed.code)) {
         window.location.href = `/c/${parsed.code.toUpperCase()}`;
         return;
       }
-      // Otherwise it's a UUID — look up the code and redirect.
       const { data } = await supabase
         .from("hotels_public")
         .select("hotel_code")
@@ -252,15 +234,11 @@ function PayPage() {
       return;
     }
 
-    // Person QR (guest or owner) — not a payment target.
     if (parsed.kind === "person") {
-      toast.info(
-        `${parsed.code} is a Moybirr account, not a payment point.`,
-      );
+      toast.info(`${parsed.code} is a Moybirr account, not a payment point.`);
       return;
     }
 
-    // Staff QR — prefills the tip form on this page.
     if (parsed.kind === "staff") {
       const code = parsed.code;
       const isUuid = /^[0-9a-f]{8}-/i.test(code);
@@ -587,7 +565,7 @@ function PayPage() {
               <span>{formatETB(total)}</span>
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Moybirr keeps a 3% commission from the service bill. Tips are never touched.
+              Moybirr keeps a 1% commission from the service bill. Tips are never touched.
             </p>
           </div>
 
