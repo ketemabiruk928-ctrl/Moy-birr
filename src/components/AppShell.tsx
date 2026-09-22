@@ -1,12 +1,40 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { Home, BedDouble, QrCode, Briefcase, User, LayoutDashboard, Users, Clapperboard } from "lucide-react";
+import {
+  Home,
+  BedDouble,
+  QrCode,
+  Briefcase,
+  User,
+  LayoutDashboard,
+  Users,
+  Clapperboard,
+  Bell,
+} from "lucide-react";
 import { useEffect, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { languages, useLang } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 
 export function AppHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   const { lang, setLang } = useLang();
+  const { user } = useAuth();
+
+  const unread = useQuery({
+    queryKey: ["unread-notifications", user?.id],
+    enabled: !!user,
+    refetchInterval: 30000,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("in_app_notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user!.id)
+        .is("read_at", null);
+      return count ?? 0;
+    },
+  });
+
   return (
     <header className="bg-gradient-primary px-5 pt-6 pb-8 text-primary-foreground">
       <div className="mx-auto flex w-full max-w-lg items-start justify-between gap-3">
@@ -21,19 +49,34 @@ export function AppHeader({ title, subtitle }: { title: string; subtitle?: strin
             {subtitle ? <p className="mt-1 text-sm opacity-90">{subtitle}</p> : null}
           </div>
         </div>
-        <select
-          value={lang}
-          onChange={(e) => setLang(e.target.value as typeof lang)}
-          aria-label="Language"
-          className="rounded-full border border-primary-foreground/40 bg-transparent px-3 py-1 text-xs font-semibold text-primary-foreground"
-        >
-          {languages.map((l) => (
-            <option key={l.code} value={l.code} className="text-foreground">
-              {l.label}
-            </option>
-          ))}
-        </select>
-
+        <div className="flex items-center gap-2">
+          {user ? (
+            <Link
+              to="/notifications"
+              className="relative flex size-9 items-center justify-center rounded-full border border-primary-foreground/40"
+              aria-label="Notifications"
+            >
+              <Bell className="size-4" />
+              {(unread.data ?? 0) > 0 ? (
+                <span className="absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                  {unread.data! > 99 ? "99+" : unread.data}
+                </span>
+              ) : null}
+            </Link>
+          ) : null}
+          <select
+            value={lang}
+            onChange={(e) => setLang(e.target.value as typeof lang)}
+            aria-label="Language"
+            className="rounded-full border border-primary-foreground/40 bg-transparent px-3 py-1 text-xs font-semibold text-primary-foreground"
+          >
+            {languages.map((l) => (
+              <option key={l.code} value={l.code} className="text-foreground">
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </header>
   );
