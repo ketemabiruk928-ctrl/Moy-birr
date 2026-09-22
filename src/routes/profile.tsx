@@ -8,13 +8,15 @@ import { useAuth } from "@/lib/auth";
 import { formatETB, languages, useLang } from "@/lib/i18n";
 import { AppHeader, AppShell, RequireAuth } from "@/components/AppShell";
 import { MediaImg, UploadButton } from "@/components/Media";
-import { TipQr } from "@/components/TipQr";
+import { TeamChat } from "@/components/TeamChat";
+import { TeamMeetings } from "@/components/TeamMeetings";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -300,15 +302,6 @@ function ProfilePage() {
           </Button>
         </Card>
 
-        {/* Guest QR — shows on own profile so guests can share their code. */}
-        {role === "guest" && profile?.moybirr_id ? (
-          <TipQr
-            title="My Moybirr QR code"
-            description="Share this with anyone who wants to send you money — it opens your public card."
-            staffCode={profile.moybirr_id}
-          />
-        ) : null}
-
         {role === "staff" ? (
           <Card className="shadow-card space-y-3 p-5">
             <div className="flex items-center justify-between">
@@ -342,7 +335,7 @@ function ProfilePage() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     You asked to join{" "}
                     {staffProfile.data?.workplace_hotel_name ?? "a hotel"}. Your owner has to
-                    approve you before you can receive tips and get your staff QR code.
+                    approve you before you can receive tips.
                   </p>
                 </>
               ) : (
@@ -493,15 +486,30 @@ function ProfilePage() {
           </Card>
         ) : null}
 
-        {/* Staff QR — only after the owner approves them. */}
+        {/* Team chat + meetings — visible to approved staff only */}
         {role === "staff" &&
-        profile?.moybirr_id &&
-        staffProfile.data?.employment_status === "active" ? (
-          <TipQr
-            title="My tip QR code"
-            description="Show this to guests — they scan it, pay the bill and 100% of the tip lands in your wallet."
-            staffCode={profile.moybirr_id}
-          />
+        employment === "active" &&
+        staffProfile.data?.hotel_id ? (
+          <Card className="shadow-card space-y-3 p-5">
+            <div>
+              <p className="text-sm font-semibold">My workplace</p>
+              <p className="text-xs text-muted-foreground">
+                Talk to your team, send shift reports to your manager, and join meetings.
+              </p>
+            </div>
+            <Tabs defaultValue="chat">
+              <TabsList className="w-full justify-start">
+                <TabsTrigger value="chat">Team chat</TabsTrigger>
+                <TabsTrigger value="meetings">Meetings</TabsTrigger>
+              </TabsList>
+              <TabsContent value="chat" className="mt-3">
+                <TeamChat hotelId={staffProfile.data.hotel_id} />
+              </TabsContent>
+              <TabsContent value="meetings" className="mt-3">
+                <TeamMeetings hotelId={staffProfile.data.hotel_id} canSchedule={false} />
+              </TabsContent>
+            </Tabs>
+          </Card>
         ) : null}
 
         <div>
