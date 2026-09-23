@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Briefcase, MapPin, Banknote } from "lucide-react";
+import { Briefcase, MapPin, Banknote, Upload, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { formatETB, useLang } from "@/lib/i18n";
@@ -10,6 +10,8 @@ import { AppHeader, AppShell, RequireAuth } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/jobs")({
   head: () => ({
@@ -41,6 +43,10 @@ function JobsPage() {
   const { user, role } = useAuth();
   const qc = useQueryClient();
   const [applying, setApplying] = useState<string | null>(null);
+  
+  // Track document URLs per job ID
+  const [documentUrls, setDocumentUrls] = useState<Record<string, string>>({});
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const jobs = useQuery({
     queryKey: ["jobs"],
@@ -68,11 +74,44 @@ function JobsPage() {
     enabled: !!user,
   });
 
+  // Function to handle document upload
+  const handleUpload = async (jobId: string, file: File) => {
+    if (!user) return;
+    setUploading(jobId);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${jobId}_${Date.now()}.${fileExt}`;
+      
+      const { data, error } = await supabase.storage
+        .from('staff_documents')
+        .upload(fileName, file);
+
+      if (error) throw error;
+
+      // Get the public URL (or signed URL) to save in the DB
+      const { data: urlData } = supabase.storage
+        .from('staff_documents')
+        .getPublicUrl(data.path);
+
+      setDocumentUrls(prev => ({ ...prev, [jobId]: urlData.publicUrl }));
+      toast.success("Document attached");
+    } catch (e: any) {
+      toast.error("Failed to upload document: " + e.message);
+    } finally {
+      setUploading(null);
+    }
+  };
+
   const apply = useMutation({
     mutationFn: async (jobId: string) => {
       const { error } = await supabase
         .from("job_applications")
-        .insert({ job_id: jobId, staff_id: user!.id, message: "Applied via Moybirr" });
+        .insert({ 
+          job_id: jobId, 
+          staff_id: user!.id, 
+          message: "Applied via Moybirr",
+          document_url: documentUrls[jobId] || null // Save the document link
+        });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -109,6 +148,8 @@ function JobsPage() {
           (jobs.data ?? []).map((j) => {
             const h = j.hotels as { name?: string } | null;
             const applied = appliedIds.has(j.id);
+            const docUrl = documentUrls[j.id];
+            
             return (
               <Card key={j.id} className="shadow-card space-y-3 p-4">
                 <div className="flex items-start gap-3">
@@ -133,17 +174,48 @@ function JobsPage() {
                     </Badge>
                   ) : null}
                 </div>
+
                 {role === "staff" ? (
-                  <Button
-                    className="w-full"
-                    disabled={applied || applying === j.id}
-                    onClick={() => {
-                      setApplying(j.id);
-                      apply.mutate(j.id);
-                    }}
-                  >
-                    {applied ? "Applied ✓" : t("apply")}
-                  </Button>
+                  <div className="space-y-3 pt-2 border-t border-border">
+                    {/* Document Upload Section */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Attach Resume/Certificate (Optional)</Label>
+                      {docUrl ? (
+                        <div className="flex items-center gap-2 rounded-md bg-muted p-2 text-xs text-primary">
+                          <FileText className="size-4" />
+                          <span className="truncate">Document attached</span>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <Input
+                            type="file"
+                            accept=".pdf,.doc,.docx,image/*"
+                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleUpload(j.id, file);
+                            }}
+                            disabled={uploading === j.id}
+                          />
+                          <Button variant="outline" className="w-full pointer-events-none">
+                            <Upload className="mr-2 size-4" />
+                            {uploading === j.id ? "Uploading..." : "Choose File"}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    <Button
+                      className="w-full"
+                      disabled={applied || applying === j.id || uploading === j.id}
+                      onClick={() => {
+                        setApplying(j.id);
+                        apply.mutate(j.id);
+                      }}
+                    >
+                      {applied ? "Applied ✓" : uploading === j.id ? "Uploading..." : t("apply")}
+                    </Button>
+                  </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">
                     Only staff accounts can apply to vacancies.
