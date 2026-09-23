@@ -11,6 +11,8 @@ import {
   Plus,
   AlertTriangle,
   Loader2,
+  FileText,
+  Phone,
 } from "lucide-react";
 
 import { PropertyForm, RoomsManager, ShowcaseManager } from "@/components/OwnerProperty";
@@ -181,6 +183,7 @@ function OwnerPage() {
     },
   });
 
+  // Note: staff_tips_total is REMOVED from this query
   const performance = useQuery({
     queryKey: ["owner-summary", hotelId],
     enabled: !!hotelId,
@@ -195,7 +198,6 @@ function OwnerPage() {
         payments: number;
         room_revenue: number;
         bookings: number;
-        staff_tips_total: number;
         service_rating: number;
         reviews: number;
         lifetime_rating: number;
@@ -251,7 +253,6 @@ function OwnerPage() {
   const confirmed = (bookings.data ?? []).filter((b) => b.status === "confirmed");
   const roomRevenue = confirmed.reduce((s, b) => s + Number(b.total), 0);
   const occupancy = confirmed.filter((b) => new Date(b.check_out) >= new Date()).length;
-  const tipTotal = Number(performance.data?.staff_tips_total ?? 0);
 
   return (
     <>
@@ -311,11 +312,7 @@ function OwnerPage() {
               label="Room revenue"
               value={formatETB(roomRevenue)}
             />
-            <Stat
-              icon={<Star className="size-4 text-primary" />}
-              label="Staff tips (30d)"
-              value={formatETB(tipTotal)}
-            />
+            {/* REMOVED: Staff tips card was here */}
             <Stat
               icon={<BedDouble className="size-4 text-primary" />}
               label="Active stays"
@@ -556,9 +553,9 @@ function OwnerPage() {
                       {j.location}
                       {j.salary ? ` · ${formatETB(j.salary)} / month` : ""}
                     </p>
-                    <p className="text-xs font-medium text-primary">
-                      {apps.length} application{apps.length === 1 ? "" : "s"}
-                    </p>
+                    
+                    {/* NEW: Dialog to view applicants securely */}
+                    <ApplicantDialog jobId={j.id} jobTitle={j.title} />
                   </Card>
                 );
               })
@@ -593,6 +590,89 @@ function Empty({ text }: { text: string }) {
     <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
       {text}
     </Card>
+  );
+}
+
+/* NEW COMPONENT: ApplicantDialog 
+   This fetches from the safe 'owner_job_applicants' view.
+   It shows stars but DOES NOT show tips.
+*/
+function ApplicantDialog({ jobId, jobTitle }: { jobId: string; jobTitle: string }) {
+  const [open, setOpen] = useState(false);
+
+  const applicants = useQuery({
+    queryKey: ["job-applicants", jobId],
+    enabled: !!jobId && open, // Only fetch when dialog opens
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("owner_job_applicants") // Safe view - hides tips
+        .select("*")
+        .eq("job_id", jobId);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="w-full mt-2">
+          View Applicants
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Applicants for {jobTitle}</DialogTitle>
+          <DialogDescription>
+            Candidates who applied. Tip amounts are hidden for privacy.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 py-4">
+          {applicants.isLoading ? (
+            <p className="text-center text-sm text-muted-foreground">Loading...</p>
+          ) : (applicants.data ?? []).length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground">No applicants yet.</p>
+          ) : (
+            (applicants.data ?? []).map((app: any) => (
+              <Card key={app.id} className="p-4 space-y-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-semibold text-sm">{app.full_name || "Applicant"}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{app.position}</p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-accent px-2 py-1 rounded-md">
+                    <Star className="size-3 fill-primary text-primary" />
+                    <span className="text-xs font-bold">
+                      {Number(app.rating).toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Phone className="size-3" />
+                  {app.phone || "No phone provided"}
+                </div>
+
+                {app.document_url ? (
+                  <a 
+                    href={app.document_url} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-xs text-primary underline mt-2"
+                  >
+                    <FileText className="size-3" />
+                    View Resume / Certificate
+                  </a>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic mt-2">No document attached</p>
+                )}
+              </Card>
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
