@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatETB } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from  "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 
 type Summary = {
   days: number;
@@ -14,7 +14,6 @@ type Summary = {
   payments: number;
   room_revenue: number;
   bookings: number;
-  staff_tips_total: number;
   service_rating: number;
   reviews: number;
   lifetime_rating: number;
@@ -31,8 +30,6 @@ type StaffPerf = {
   employment_status: string;
   avg_stars: number;
   ratings_count: number;
-  tips_total: number;
-  tips_count: number;
   lifetime_rating: number;
   lifetime_ratings: number;
 };
@@ -127,13 +124,6 @@ export function OwnerPerformance({ hotelId }: { hotelId: string }) {
             </Card>
           </div>
 
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold">Tips earned by your team</p>
-              <p className="text-lg font-bold">{formatETB(s.staff_tips_total)}</p>
-            </div>
-          </Card>
-
           <p className="pt-2 text-sm font-semibold">Per-staff breakdown</p>
           {staff.isLoading ? (
             <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -160,7 +150,7 @@ export function OwnerPerformance({ hotelId }: { hotelId: string }) {
                     {p.employment_status}
                   </Badge>
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="grid grid-cols-2 gap-2 text-center">
                   <div className="rounded-lg bg-muted p-2">
                     <p className="text-[11px] text-muted-foreground">Rating</p>
                     <p className="text-sm font-bold">
@@ -172,10 +162,6 @@ export function OwnerPerformance({ hotelId }: { hotelId: string }) {
                     <p className="text-sm font-bold">
                       {p.lifetime_ratings > 0 ? Number(p.lifetime_rating).toFixed(1) : "—"}
                     </p>
-                  </div>
-                  <div className="rounded-lg bg-muted p-2">
-                    <p className="text-[11px] text-muted-foreground">Tips</p>
-                    <p className="text-sm font-bold">{formatETB(p.tips_total)}</p>
                   </div>
                 </div>
               </Card>
