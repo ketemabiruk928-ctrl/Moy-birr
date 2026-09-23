@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Trash2, Image as ImageIcon, Video, BedDouble } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, Video, BedDouble, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatETB } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
@@ -39,7 +39,6 @@ const VENUE_TYPES = [
   { value: "lounge", label: "Lounge" },
 ];
 
-// Venue types that never take room bookings.
 const ROOMLESS = new Set(["restaurant", "cafe", "bar", "lounge"]);
 
 export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
@@ -273,6 +272,7 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
   const [roomType, setRoomType] = useState("");
   const [price, setPrice] = useState("");
   const [capacity, setCapacity] = useState("2");
+  const [classStage, setClassStage] = useState("");
 
   const rooms = useQuery({
     queryKey: ["owner-rooms", hotelId],
@@ -294,6 +294,7 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
         room_type: roomType,
         price: Number(price),
         capacity: Number(capacity) || 2,
+        class_stage: classStage || null,
       });
       if (error) throw error;
     },
@@ -302,6 +303,7 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
       setRoomType("");
       setPrice("");
       setCapacity("2");
+      setClassStage("");
       void qc.invalidateQueries({ queryKey: ["owner-rooms", hotelId] });
       void qc.invalidateQueries({ queryKey: ["rooms", hotelId] });
     },
@@ -360,6 +362,15 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
             />
           </div>
         </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="cs">Class Stage (optional)</Label>
+          <Input
+            id="cs"
+            value={classStage}
+            onChange={(e) => setClassStage(e.target.value)}
+            placeholder="e.g. Standard, VIP, Executive"
+          />
+        </div>
         <Button
           className="w-full"
           disabled={!roomType || !price || add.isPending}
@@ -384,6 +395,11 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
               <div>
                 <p className="text-sm font-semibold">{r.room_type}</p>
                 <p className="text-xs text-muted-foreground">Up to {r.capacity} guests</p>
+                {r.class_stage ? (
+                  <Badge variant="outline" className="mt-1 text-[10px]">
+                    {r.class_stage}
+                  </Badge>
+                ) : null}
               </div>
               <div className="flex items-center gap-3">
                 <p className="text-sm font-bold">{formatETB(r.price)}</p>
@@ -436,9 +452,20 @@ export function ShowcaseManager({
       if (!premiumActive) {
         throw new Error("Monthly subscription required to post photos and videos");
       }
+
+      // Determine which column to save to
+      const insertData = {
+        hotel_id: hotelId,
+        kind: kind,
+        caption: caption,
+        moderation_status: "pending",
+        url: kind === "photo" ? url : null,          // Save photo to 'url'
+        video_url: kind === "video" ? url : null,    // Save video to 'video_url'
+      };
+
       const { error } = await supabase
         .from("hotel_media")
-        .insert({ hotel_id: hotelId, kind, url, caption, moderation_status: "pending" });
+        .insert(insertData);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -546,7 +573,7 @@ export function ShowcaseManager({
         (media.data ?? []).map((m) => (
           <Card key={m.id} className="shadow-card overflow-hidden p-0">
             {m.kind === "video" ? (
-              <MediaVideo src={m.url} className="h-44 w-full bg-muted object-cover" />
+              <MediaVideo src={m.video_url || m.url} className="h-44 w-full bg-muted object-cover" />
             ) : (
               <MediaImg
                 src={m.url}
@@ -581,6 +608,100 @@ export function ShowcaseManager({
               >
                 <Trash2 className="size-4 text-destructive" />
               </Button>
+            </div>
+          </Card>
+        ))
+      )}
+    </div>
+  );
+}
+
+export function GuestRoomSearch({ hotelId }: { hotelId: string }) {
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [filterRoomType, setFilterRoomType] = useState("");
+  const [filterClass, setFilterClass] = useState("");
+
+  const rooms = useQuery({
+    queryKey: ["guest-rooms", hotelId, minPrice, maxPrice, filterRoomType, filterClass],
+    queryFn: async () => {
+      let query = supabase
+        .from("rooms")
+        .select("*")
+        .eq("hotel_id", hotelId);
+
+      if (minPrice) query = query.gte("price", Number(minPrice));
+      if (maxPrice) query = query.lte("price", Number(maxPrice));
+      if (filterRoomType) query = query.ilike("room_type", `%${filterRoomType}%`);
+      if (filterClass) query = query.ilike("class_stage", `%${filterClass}%`);
+
+      const { data, error } = await query.order("price");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  return (
+    <div className="space-y-4">
+      <Card className="shadow-card space-y-3 p-4">
+        <p className="text-sm font-semibold">Find your room</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            placeholder="Min Price (ETB)"
+            type="number"
+            value={minPrice}
+            onChange={(e) => setMinPrice(e.target.value)}
+          />
+          <Input
+            placeholder="Max Price (ETB)"
+            type="number"
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+          />
+          <Input
+            placeholder="Room Type (e.g. Deluxe)"
+            value={filterRoomType}
+            onChange={(e) => setFilterRoomType(e.target.value)}
+          />
+          <Input
+            placeholder="Class (e.g. VIP)"
+            value={filterClass}
+            onChange={(e) => setFilterClass(e.target.value)}
+          />
+        </div>
+        <Button className="w-full" variant="outline" onClick={() => {
+          setMinPrice("");
+          setMaxPrice("");
+          setFilterRoomType("");
+          setFilterClass("");
+        }}>
+          Clear Filters
+        </Button>
+      </Card>
+
+      {rooms.isLoading ? (
+        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
+          Searching rooms...
+        </Card>
+      ) : (rooms.data ?? []).length === 0 ? (
+        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
+          No rooms match your criteria. Try adjusting your filters.
+        </Card>
+      ) : (
+        (rooms.data ?? []).map((r) => (
+          <Card key={r.id} className="shadow-card flex items-center justify-between p-4">
+            <div>
+              <p className="text-sm font-semibold">{r.room_type}</p>
+              <p className="text-xs text-muted-foreground">Up to {r.capacity} guests</p>
+              {r.class_stage ? (
+                <Badge variant="outline" className="mt-1 text-[10px]">
+                  {r.class_stage}
+                </Badge>
+              ) : null}
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-bold">{formatETB(r.price)}</p>
+              <p className="text-[10px] text-muted-foreground">per night</p>
             </div>
           </Card>
         ))
