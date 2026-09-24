@@ -102,7 +102,7 @@ function ProfilePage() {
     mutationFn: async () => {
       const trimmedEmail = email.trim();
       if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-        throw new Error(t("profile.error_invalid_email"));
+        throw new Error(t("profile_page.error_invalid_email"));
       }
       const { error } = await supabase
         .from("profiles")
@@ -116,7 +116,7 @@ function ProfilePage() {
       if (error) throw error;
     },
     onSuccess: async () => {
-      toast.success(t("profile.profile_updated"));
+      toast.success(t("profile_page.profile_updated"));
       await refresh();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -129,7 +129,9 @@ function ProfilePage() {
       return data;
     },
     onSuccess: (refund) => {
-      toast.success(t("profile.booking_cancelled", { amount: formatETB(refund as number) }));
+      toast.success(
+        t("profile_page.booking_cancelled", { amount: formatETB(refund as number) }),
+      );
       void qc.invalidateQueries({ queryKey: ["bookings"] });
       void qc.invalidateQueries({ queryKey: ["wallet"] });
     },
@@ -145,7 +147,7 @@ function ProfilePage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success(t("profile.join_request_sent"));
+      toast.success(t("profile_page.join_request_sent"));
       setHotelCode("");
       void qc.invalidateQueries({ queryKey: ["my-staff-profile"] });
     },
@@ -187,7 +189,7 @@ function ProfilePage() {
       if (addrErr) throw addrErr;
     },
     onSuccess: () => {
-      toast.success(t("profile.staff_profile_updated"));
+      toast.success(t("profile_page.staff_profile_updated"));
       void qc.invalidateQueries({ queryKey: ["my-staff-profile"] });
       void qc.invalidateQueries({ queryKey: ["my-staff-address"] });
       void qc.invalidateQueries({ queryKey: ["staff-directory"] });
@@ -211,7 +213,7 @@ function ProfilePage() {
         title={t("profile")}
         subtitle={
           role === "staff" && employment !== "active"
-            ? t("profile.pending_approval")
+            ? t("profile_page.pending_approval")
             : profile?.moybirr_id
               ? profile.moybirr_id + (profile?.phone ? " · " + profile.phone : "")
               : (profile?.phone ?? "")
@@ -239,9 +241,9 @@ function ProfilePage() {
 
           <div className="space-y-1.5">
             <Label htmlFor="pemail">
-              {t("profile.email")}{" "}
+              {t("profile_page.email")}{" "}
               <span className="font-normal text-muted-foreground">
-                ({t("profile.email_note")})
+                ({t("profile_page.email_note")})
               </span>
             </Label>
             <Input
@@ -253,23 +255,23 @@ function ProfilePage() {
               onChange={(e) => setEmail(e.target.value)}
             />
             <p className="text-[11px] text-muted-foreground">
-              {t("profile.email_privacy")}
+              {t("profile_page.email_privacy")}
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label>{t("profile.profile_photo")}</Label>
+            <Label>{t("profile_page.profile_photo")}</Label>
             {photo ? (
               <MediaImg
                 src={photo}
-                alt={t("profile.profile_photo")}
+                alt={t("profile_page.profile_photo")}
                 className="size-20 rounded-full object-cover"
               />
             ) : null}
             {user ? (
               <UploadButton
                 userId={user.id}
-                label={t("profile.upload_photo")}
+                label={t("profile_page.upload_photo")}
                 onUploaded={setPhoto}
               />
             ) : null}
@@ -300,14 +302,14 @@ function ProfilePage() {
             disabled={saveProfile.isPending}
             onClick={() => saveProfile.mutate()}
           >
-            {t("profile.save_profile")}
+            {t("profile_page.save_profile")}
           </Button>
         </Card>
 
         {role === "staff" ? (
           <Card className="shadow-card space-y-3 p-5">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold">{t("profile.my_staff_profile")}</p>
+              <p className="text-sm font-semibold">{t("profile_page.my_staff_profile")}</p>
               <span className="flex items-center gap-1 text-sm font-bold">
                 <Star className="size-4 fill-primary text-primary" />
                 {Number(staffProfile.data?.rating ?? 0).toFixed(1)}
@@ -317,12 +319,14 @@ function ProfilePage() {
             <div className="rounded-xl bg-muted/60 p-3">
               {employment === "active" ? (
                 <>
-                  <p className="text-xs text-muted-foreground">{t("profile.you_work_at")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("profile_page.you_work_at")}
+                  </p>
                   <p className="text-sm font-semibold">
-                    {staffProfile.data?.workplace_hotel_name ?? t("profile.your_hotel")}
+                    {staffProfile.data?.workplace_hotel_name ?? t("profile_page.your_hotel")}
                   </p>
                   <Badge variant="secondary" className="mt-2">
-                    {t("profile.approved_tips")}
+                    {t("profile_page.approved_tips")}
                   </Badge>
                   {profile?.moybirr_id ? (
                     <p className="mt-2 flex items-center gap-1 font-mono text-xs text-muted-foreground">
@@ -333,20 +337,25 @@ function ProfilePage() {
                 </>
               ) : employment === "pending" ? (
                 <>
-                  <p className="text-sm font-semibold">{t("profile.waiting_approval")}</p>
+                  <p className="text-sm font-semibold">
+                    {t("profile_page.waiting_approval")}
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {t("profile.pending_hint", {
-                      hotel: staffProfile.data?.workplace_hotel_name ?? t("profile.a_hotel"),
+                    {t("profile_page.pending_hint", {
+                      hotel:
+                        staffProfile.data?.workplace_hotel_name ?? t("profile_page.a_hotel"),
                     })}
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="text-sm font-semibold">{t("profile.link_workplace")}</p>
+                  <p className="text-sm font-semibold">
+                    {t("profile_page.link_workplace")}
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {employment === "rejected"
-                      ? t("profile.rejected_hint")
-                      : t("profile.link_hint")}
+                      ? t("profile_page.rejected_hint")
+                      : t("profile_page.link_hint")}
                   </p>
                   <div className="mt-2 flex gap-2">
                     <Input
@@ -359,7 +368,7 @@ function ProfilePage() {
                       disabled={!hotelCode.trim() || joinHotel.isPending}
                       onClick={() => joinHotel.mutate(hotelCode)}
                     >
-                      {t("profile.join")}
+                      {t("profile_page.join")}
                     </Button>
                   </div>
                 </>
@@ -367,22 +376,24 @@ function ProfilePage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="pos">{t("profile.position")}</Label>
+              <Label htmlFor="pos">{t("profile_page.position")}</Label>
               <Input
                 id="pos"
-                placeholder={staffProfile.data?.position ?? t("profile.position_placeholder")}
+                placeholder={
+                  staffProfile.data?.position ?? t("profile_page.position_placeholder")
+                }
                 value={position}
                 onChange={(e) => setPosition(e.target.value)}
               />
             </div>
 
             <p className="pt-1 text-xs font-medium text-muted-foreground">
-              {t("profile.current_workplace")}
+              {t("profile_page.current_workplace")}
             </p>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="region">{t("profile.region")}</Label>
+                <Label htmlFor="region">{t("profile_page.region")}</Label>
                 <Input
                   id="region"
                   placeholder={staffProfile.data?.region ?? "Addis Ababa"}
@@ -391,7 +402,7 @@ function ProfilePage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="city">{t("profile.city")}</Label>
+                <Label htmlFor="city">{t("profile_page.city")}</Label>
                 <Input
                   id="city"
                   placeholder={staffProfile.data?.city ?? "Addis Ababa"}
@@ -400,7 +411,7 @@ function ProfilePage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="subcity">{t("profile.subcity")}</Label>
+                <Label htmlFor="subcity">{t("profile_page.subcity")}</Label>
                 <Input
                   id="subcity"
                   placeholder={staffProfile.data?.subcity ?? "Bole"}
@@ -409,7 +420,7 @@ function ProfilePage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="wereda">{t("profile.wereda")}</Label>
+                <Label htmlFor="wereda">{t("profile_page.wereda")}</Label>
                 <Input
                   id="wereda"
                   placeholder={staffAddress.data?.wereda ?? "03"}
@@ -418,11 +429,11 @@ function ProfilePage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="house">{t("profile.house_number")}</Label>
+                <Label htmlFor="house">{t("profile_page.house_number")}</Label>
                 <Input
                   id="house"
                   placeholder={
-                    staffAddress.data?.house_number ?? t("profile.optional_label")
+                    staffAddress.data?.house_number ?? t("profile_page.optional_label")
                   }
                   value={houseNumber}
                   onChange={(e) => setHouseNumber(e.target.value)}
@@ -431,7 +442,7 @@ function ProfilePage() {
             </div>
 
             <p className="text-[11px] text-muted-foreground">
-              {t("profile.privacy_note")}
+              {t("profile_page.privacy_note")}
             </p>
 
             <Button
@@ -450,7 +461,7 @@ function ProfilePage() {
                 });
               }}
             >
-              {t("profile.save_workplace")}
+              {t("profile_page.save_workplace")}
             </Button>
 
             <Button
@@ -470,12 +481,12 @@ function ProfilePage() {
                       wereda: wereda || staffAddress.data?.wereda || "",
                       house_number: houseNumber || staffAddress.data?.house_number || "",
                     }),
-                  () => toast.error(t("profile.error_gps")),
+                  () => toast.error(t("profile_page.error_gps")),
                 );
               }}
             >
               <Navigation className="mr-2 size-4" />
-              {t("profile.save_with_gps")}
+              {t("profile_page.save_with_gps")}
             </Button>
 
             {staffProfile.data?.lat && employment === "active" ? (
@@ -483,7 +494,7 @@ function ProfilePage() {
                 <MapPin className="mr-1 inline size-3" />
                 {Number(staffProfile.data.lat).toFixed(3)},{" "}
                 {Number(staffProfile.data.lng).toFixed(3)} · {staffProfile.data.rating_count}{" "}
-                {t("profile.ratings")}
+                {t("profile_page.ratings")}
               </p>
             ) : null}
           </Card>
@@ -495,9 +506,9 @@ function ProfilePage() {
         staffProfile.data?.hotel_id ? (
           <Card className="shadow-card space-y-3 p-5">
             <div>
-              <p className="text-sm font-semibold">{t("profile.my_workplace")}</p>
+              <p className="text-sm font-semibold">{t("profile_page.my_workplace")}</p>
               <p className="text-xs text-muted-foreground">
-                {t("profile.workplace_desc")}
+                {t("profile_page.workplace_desc")}
               </p>
             </div>
             <Tabs defaultValue="chat">
@@ -520,7 +531,7 @@ function ProfilePage() {
           <div className="space-y-3">
             {(bookings.data ?? []).length === 0 ? (
               <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-                {t("profile.no_bookings")}
+                {t("profile_page.no_bookings")}
               </Card>
             ) : (
               (bookings.data ?? []).map((b) => {
@@ -671,7 +682,11 @@ function RatingDialog({
             <Textarea id="cmt" value={comment} onChange={(e) => setComment(e.target.value)} />
           </div>
 
-          <Button className="w-full" disabled={submit.isPending} onClick={() => submit.mutate()}>
+          <Button
+            className="w-full"
+            disabled={submit.isPending}
+            onClick={() => submit.mutate()}
+          >
             {t("wallet.confirm")}
           </Button>
         </div>
@@ -686,7 +701,9 @@ function Stars({ value, onChange }: { value: number; onChange: (v: number) => vo
       {[1, 2, 3, 4, 5].map((n) => (
         <button key={n} type="button" onClick={() => onChange(n)}>
           <Star
-            className={`size-7 ${n <= value ? "fill-primary text-primary" : "text-muted-foreground"}`}
+            className={`size-7 ${
+              n <= value ? "fill-primary text-primary" : "text-muted-foreground"
+            }`}
           />
         </button>
       ))}
