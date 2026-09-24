@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Copy, Share2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useLang } from "@/lib/i18n";
 
 /**
  * Build the URL encoded in a QR code.
@@ -42,6 +43,7 @@ export function TipQr({
   hotelCode?: string | null | undefined;
   staffCode?: string | null | undefined;
 }) {
+  const { t } = useLang();
   const [origin] = useState(() =>
     typeof window !== "undefined" ? window.location.origin : "https://moy-birr.vercel.app",
   );
@@ -50,9 +52,9 @@ export function TipQr({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link);
-      toast.success("Link copied");
+      toast.success(t("tip_qr.copied"));
     } catch {
-      toast.error("Could not copy the link");
+      toast.error(t("tip_qr.copy_failed"));
     }
   };
 
@@ -80,11 +82,11 @@ export function TipQr({
       <div className="flex gap-2">
         <Button variant="outline" size="sm" className="flex-1" onClick={() => void copy()}>
           <Copy className="mr-2 size-4" />
-          Copy link
+          {t("tip_qr.copy_link")}
         </Button>
         <Button size="sm" className="flex-1" onClick={() => void share()}>
           <Share2 className="mr-2 size-4" />
-          Share
+          {t("tip_qr.share")}
         </Button>
       </div>
     </Card>
