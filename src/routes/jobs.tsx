@@ -43,7 +43,7 @@ function JobsPage() {
   const { user, role } = useAuth();
   const qc = useQueryClient();
   const [applying, setApplying] = useState<string | null>(null);
-  
+
   // Track document URLs per job ID
   const [documentUrls, setDocumentUrls] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<string | null>(null);
@@ -74,29 +74,27 @@ function JobsPage() {
     enabled: !!user,
   });
 
-  // Function to handle document upload
   const handleUpload = async (jobId: string, file: File) => {
     if (!user) return;
     setUploading(jobId);
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = file.name.split(".").pop();
       const fileName = `${user.id}/${jobId}_${Date.now()}.${fileExt}`;
-      
+
       const { data, error } = await supabase.storage
-        .from('staff_documents')
+        .from("staff_documents")
         .upload(fileName, file);
 
       if (error) throw error;
 
-      // Get the public URL (or signed URL) to save in the DB
       const { data: urlData } = supabase.storage
-        .from('staff_documents')
+        .from("staff_documents")
         .getPublicUrl(data.path);
 
-      setDocumentUrls(prev => ({ ...prev, [jobId]: urlData.publicUrl }));
-      toast.success("Document attached");
+      setDocumentUrls((prev) => ({ ...prev, [jobId]: urlData.publicUrl }));
+      toast.success(t("jobs.document_attached"));
     } catch (e: any) {
-      toast.error("Failed to upload document: " + e.message);
+      toast.error(t("jobs.upload_failed") + ": " + e.message);
     } finally {
       setUploading(null);
     }
@@ -106,16 +104,16 @@ function JobsPage() {
     mutationFn: async (jobId: string) => {
       const { error } = await supabase
         .from("job_applications")
-        .insert({ 
-          job_id: jobId, 
-          staff_id: user!.id, 
-          message: "Applied via Moybirr",
-          document_url: documentUrls[jobId] || null // Save the document link
+        .insert({
+          job_id: jobId,
+          staff_id: user!.id,
+          message: t("jobs.applied_via_moybirr"),
+          document_url: documentUrls[jobId] || null,
         });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Application sent to the hotel owner");
+      toast.success(t("jobs.apply_success"));
       void qc.invalidateQueries({ queryKey: ["my-applications"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -126,30 +124,33 @@ function JobsPage() {
 
   return (
     <>
-      <AppHeader title={t("jobs")} subtitle="Vacancies from verified hotel owners" />
+      <AppHeader
+        title={t("jobs")}
+        subtitle={t("jobs.subtitle")}
+      />
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
         {role === "owner" ? (
           <Card className="shadow-card border-primary/30 bg-accent p-4">
             <p className="text-sm font-semibold text-accent-foreground">
-              Hiring? Post a vacancy for 200 ETB
+              {t("jobs.hiring_banner")}
             </p>
             <p className="mt-1 text-xs text-accent-foreground/80">
-              Requires an active premium subscription (500 ETB/month) from your dashboard.
+              {t("jobs.hiring_banner_desc")}
             </p>
           </Card>
         ) : null}
 
         {(jobs.data ?? []).length === 0 ? (
           <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-            No open vacancies right now. Check back soon.
+            {t("jobs.no_jobs")}
           </Card>
         ) : (
           (jobs.data ?? []).map((j) => {
             const h = j.hotels as { name?: string } | null;
             const applied = appliedIds.has(j.id);
             const docUrl = documentUrls[j.id];
-            
+
             return (
               <Card key={j.id} className="shadow-card space-y-3 p-4">
                 <div className="flex items-start gap-3">
@@ -158,7 +159,9 @@ function JobsPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <h2 className="font-semibold">{j.title}</h2>
-                    <p className="text-xs text-muted-foreground">{h?.name ?? "Hotel"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {h?.name ?? t("jobs.hotel")}
+                    </p>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">{j.description}</p>
@@ -170,20 +173,19 @@ function JobsPage() {
                   {j.salary ? (
                     <Badge variant="secondary">
                       <Banknote className="mr-1 size-3" />
-                      {formatETB(j.salary)} / month
+                      {formatETB(j.salary)} / {t("month")}
                     </Badge>
                   ) : null}
                 </div>
 
                 {role === "staff" ? (
                   <div className="space-y-3 pt-2 border-t border-border">
-                    {/* Document Upload Section */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Attach Resume/Certificate (Optional)</Label>
+                      <Label className="text-xs">{t("jobs.attach_resume")}</Label>
                       {docUrl ? (
                         <div className="flex items-center gap-2 rounded-md bg-muted p-2 text-xs text-primary">
                           <FileText className="size-4" />
-                          <span className="truncate">Document attached</span>
+                          <span className="truncate">{t("jobs.document_attached")}</span>
                         </div>
                       ) : (
                         <div className="relative">
@@ -199,7 +201,9 @@ function JobsPage() {
                           />
                           <Button variant="outline" className="w-full pointer-events-none">
                             <Upload className="mr-2 size-4" />
-                            {uploading === j.id ? "Uploading..." : "Choose File"}
+                            {uploading === j.id
+                              ? t("jobs.uploading")
+                              : t("jobs.choose_file")}
                           </Button>
                         </div>
                       )}
@@ -213,12 +217,16 @@ function JobsPage() {
                         apply.mutate(j.id);
                       }}
                     >
-                      {applied ? "Applied ✓" : uploading === j.id ? "Uploading..." : t("apply")}
+                      {applied
+                        ? t("staff_actions.applied") + " ✓"
+                        : uploading === j.id
+                          ? t("jobs.uploading")
+                          : t("staff_actions.apply")}
                     </Button>
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    Only staff accounts can apply to vacancies.
+                    {t("jobs.only_staff_apply")}
                   </p>
                 )}
               </Card>
