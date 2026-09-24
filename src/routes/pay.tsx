@@ -159,7 +159,7 @@ function PayPage() {
 
   const pay = useMutation({
     mutationFn: async () => {
-      if (!hotelId) throw new Error(t("pay.error_scan_hotel"));
+      if (!hotelId) throw new Error(t("pay_page.error_scan_hotel"));
       const { error } = await supabase.rpc("pay_service", {
         _hotel_id: hotelId,
         _staff_profile_id: staffId as unknown as string,
@@ -194,12 +194,12 @@ function PayPage() {
     onSuccess: () => {
       toast.success(
         tipNum > 0
-          ? t("pay.success_with_tip", {
+          ? t("pay_page.success_with_tip", {
               total: formatETB(total),
               tip: formatETB(tipNum),
               staff: staffName || t("staff_member"),
             })
-          : t("pay.success_no_tip", { total: formatETB(total) }),
+          : t("pay_page.success_no_tip", { total: formatETB(total) }),
       );
       setBill("");
       setTip("");
@@ -216,7 +216,7 @@ function PayPage() {
   const handleScan = async (text: string) => {
     const parsed = parseQrValue(text);
     if (!parsed) {
-      toast.error(t("pay.error_invalid_qr"));
+      toast.error(t("pay_page.error_invalid_qr"));
       return;
     }
 
@@ -234,12 +234,12 @@ function PayPage() {
         window.location.href = `/c/${data.hotel_code.toUpperCase()}`;
         return;
       }
-      toast.error(t("pay.error_hotel_not_found"));
+      toast.error(t("pay_page.error_hotel_not_found"));
       return;
     }
 
     if (parsed.kind === "person") {
-      toast.info(t("pay.info_person_qr", { code: parsed.code }));
+      toast.info(t("pay_page.info_person_qr", { code: parsed.code }));
       return;
     }
 
@@ -270,7 +270,7 @@ function PayPage() {
       }
 
       if (!staffRow) {
-        toast.error(t("pay.error_staff_not_found"));
+        toast.error(t("pay_page.error_staff_not_found"));
         return;
       }
 
@@ -279,7 +279,7 @@ function PayPage() {
       setShowHotelSearch(false);
       if (staffRow.full_name) setStaffName(staffRow.full_name);
       toast.success(
-        t("pay.success_staff_qr", {
+        t("pay_page.success_staff_qr", {
           staff: staffRow.full_name ?? t("staff_member"),
         }),
       );
@@ -327,13 +327,13 @@ function PayPage() {
               <QrCode className="size-6 text-primary" />
             </div>
             <div>
-              <p className="text-sm font-semibold">{t("pay.scan_title")}</p>
-              <p className="text-xs text-muted-foreground">{t("pay.scan_desc")}</p>
+              <p className="text-sm font-semibold">{t("pay_page.scan_title")}</p>
+              <p className="text-xs text-muted-foreground">{t("pay_page.scan_desc")}</p>
             </div>
           </div>
 
           <div className="mt-4">
-            <QrScanButton onResult={handleScan} label={t("pay.open_camera")} />
+            <QrScanButton onResult={handleScan} label={t("pay_page.open_camera")} />
           </div>
 
           <button
@@ -342,16 +342,16 @@ function PayPage() {
           >
             <Navigation className="size-3.5 text-primary" />
             {status === "locating"
-              ? t("pay.locating")
+              ? t("pay_page.locating")
               : status === "ready"
-                ? t("pay.sorted_by_distance")
+                ? t("pay_page.sorted_by_distance")
                 : status === "denied"
-                  ? t("pay.location_blocked")
-                  : t("pay.use_gps")}
+                  ? t("pay_page.location_blocked")
+                  : t("pay_page.use_gps")}
           </button>
 
           <div className="mt-4 space-y-2">
-            <Label>{t("pay.hotel_label")}</Label>
+            <Label>{t("pay_page.hotel_label")}</Label>
             {selectedHotel && !showHotelSearch ? (
               <div className="flex items-center justify-between rounded-xl border border-primary bg-accent p-3">
                 <span className="text-sm">
@@ -359,7 +359,7 @@ function PayPage() {
                   <span className="text-muted-foreground"> · {selectedHotel.city}</span>
                 </span>
                 <Button variant="ghost" size="sm" onClick={() => setShowHotelSearch(true)}>
-                  {t("pay.change")}
+                  {t("pay_page.change")}
                 </Button>
               </div>
             ) : (
@@ -383,11 +383,13 @@ function PayPage() {
                     className="pl-9"
                     value={hotelQuery}
                     onChange={(e) => setHotelQuery(e.target.value)}
-                    placeholder={t("pay.hotel_search_placeholder")}
+                    placeholder={t("pay_page.hotel_search_placeholder")}
                   />
                 </div>
                 {hotelResults.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{t("pay.no_hotel_match")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("pay_page.no_hotel_match")}
+                  </p>
                 ) : (
                   <div className="grid gap-2">
                     {hotelResults.map((h) => (
@@ -451,11 +453,11 @@ function PayPage() {
                 onClick={() => setTip("")}
                 className="rounded-xl border border-border p-2.5 text-sm font-semibold"
               >
-                {t("pay.clear")}
+                {t("pay_page.clear")}
               </button>
             </div>
             <div className="mt-3 space-y-1.5">
-              <Label htmlFor="tip">{t("pay.custom_tip")}</Label>
+              <Label htmlFor="tip">{t("pay_page.custom_tip")}</Label>
               <Input
                 id="tip"
                 inputMode="decimal"
@@ -467,19 +469,19 @@ function PayPage() {
           </div>
 
           <div className="mt-5 space-y-2">
-            <Label htmlFor="staff-name">{t("pay.staff_id_label")}</Label>
+            <Label htmlFor="staff-name">{t("pay_page.staff_id_label")}</Label>
             <Input
               id="staff-name"
               value={staffName}
               onChange={(e) => setStaffName(e.target.value.toUpperCase())}
-              placeholder={t("pay.staff_id_placeholder")}
+              placeholder={t("pay_page.staff_id_placeholder")}
             />
             <div className="grid gap-2">
               {staffResults.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {(staff.data ?? []).length === 0
-                    ? t("pay.no_staff_registered")
-                    : t("pay.no_staff_match")}
+                    ? t("pay_page.no_staff_registered")
+                    : t("pay_page.no_staff_match")}
                 </p>
               ) : (
                 staffResults.map((s) => (
@@ -512,7 +514,7 @@ function PayPage() {
           </div>
 
           <div className="mt-5">
-            <Label>{t("pay.rate_hotel_label")}</Label>
+            <Label>{t("pay_page.rate_hotel_label")}</Label>
             <div className="mt-2 flex items-center gap-2">
               {[1, 2, 3, 4, 5].map((n) => (
                 <button
@@ -537,7 +539,7 @@ function PayPage() {
               className="mt-2"
               value={hotelComment}
               onChange={(e) => setHotelComment(e.target.value)}
-              placeholder={t("pay.hotel_comment_placeholder")}
+              placeholder={t("pay_page.hotel_comment_placeholder")}
             />
           </div>
 
@@ -562,26 +564,24 @@ function PayPage() {
               ))}
               {stars > 0 ? (
                 <span className="text-xs text-muted-foreground">
-                  {stars}/5 — {t("pay.saved_with_payment")}
+                  {stars}/5 — {t("pay_page.saved_with_payment")}
                 </span>
               ) : null}
             </div>
             {stars > 0 && !staffId ? (
               <p className="mt-1 text-[11px] text-muted-foreground">
-                {t("pay.pick_staff_hint")}
+                {t("pay_page.pick_staff_hint")}
               </p>
             ) : null}
           </div>
 
           <div className="mt-5 rounded-xl bg-muted p-4">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">
-                {t("staff_actions.service_bill")}
-              </span>
+              <span className="text-muted-foreground">{t("staff_actions.service_bill")}</span>
               <span>{formatETB(billNum)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">{t("pay.tip_to_staff")}</span>
+              <span className="text-muted-foreground">{t("pay_page.tip_to_staff")}</span>
               <span>{formatETB(tipNum)}</span>
             </div>
             <div className="mt-2 flex justify-between border-t border-border pt-2 text-base font-bold">
@@ -589,7 +589,7 @@ function PayPage() {
               <span>{formatETB(total)}</span>
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              {t("pay.commission_note")}
+              {t("pay_page.commission_note")}
             </p>
           </div>
 
@@ -599,11 +599,11 @@ function PayPage() {
             disabled={pay.isPending || total <= 0 || !hotelId}
             onClick={() => pay.mutate()}
           >
-            {t("pay.pay_amount", { amount: formatETB(total) })}
+            {t("pay_page.pay_amount", { amount: formatETB(total) })}
           </Button>
           {tipNum > 0 && !staffId ? (
             <Badge variant="secondary" className="mt-3">
-              {t("pay.select_staff_for_tip")}
+              {t("pay_page.select_staff_for_tip")}
             </Badge>
           ) : null}
         </Card>
