@@ -44,7 +44,6 @@ function JobsPage() {
   const qc = useQueryClient();
   const [applying, setApplying] = useState<string | null>(null);
 
-  // Track document URLs per job ID
   const [documentUrls, setDocumentUrls] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<string | null>(null);
 
@@ -92,9 +91,9 @@ function JobsPage() {
         .getPublicUrl(data.path);
 
       setDocumentUrls((prev) => ({ ...prev, [jobId]: urlData.publicUrl }));
-      toast.success(t("jobs.document_attached"));
+      toast.success(t("jobs_page.document_attached"));
     } catch (e: any) {
-      toast.error(t("jobs.upload_failed") + ": " + e.message);
+      toast.error(t("jobs_page.upload_failed") + ": " + e.message);
     } finally {
       setUploading(null);
     }
@@ -107,13 +106,13 @@ function JobsPage() {
         .insert({
           job_id: jobId,
           staff_id: user!.id,
-          message: t("jobs.applied_via_moybirr"),
+          message: t("jobs_page.applied_via_moybirr"),
           document_url: documentUrls[jobId] || null,
         });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success(t("jobs.apply_success"));
+      toast.success(t("jobs_page.apply_success"));
       void qc.invalidateQueries({ queryKey: ["my-applications"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -124,26 +123,23 @@ function JobsPage() {
 
   return (
     <>
-      <AppHeader
-        title={t("jobs")}
-        subtitle={t("jobs.subtitle")}
-      />
+      <AppHeader title={t("jobs")} subtitle={t("jobs_page.subtitle")} />
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
         {role === "owner" ? (
           <Card className="shadow-card border-primary/30 bg-accent p-4">
             <p className="text-sm font-semibold text-accent-foreground">
-              {t("jobs.hiring_banner")}
+              {t("jobs_page.hiring_banner")}
             </p>
             <p className="mt-1 text-xs text-accent-foreground/80">
-              {t("jobs.hiring_banner_desc")}
+              {t("jobs_page.hiring_banner_desc")}
             </p>
           </Card>
         ) : null}
 
         {(jobs.data ?? []).length === 0 ? (
           <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-            {t("jobs.no_jobs")}
+            {t("jobs_page.no_jobs")}
           </Card>
         ) : (
           (jobs.data ?? []).map((j) => {
@@ -160,7 +156,7 @@ function JobsPage() {
                   <div className="min-w-0 flex-1">
                     <h2 className="font-semibold">{j.title}</h2>
                     <p className="text-xs text-muted-foreground">
-                      {h?.name ?? t("jobs.hotel")}
+                      {h?.name ?? t("jobs_page.hotel")}
                     </p>
                   </div>
                 </div>
@@ -181,11 +177,11 @@ function JobsPage() {
                 {role === "staff" ? (
                   <div className="space-y-3 pt-2 border-t border-border">
                     <div className="space-y-1.5">
-                      <Label className="text-xs">{t("jobs.attach_resume")}</Label>
+                      <Label className="text-xs">{t("jobs_page.attach_resume")}</Label>
                       {docUrl ? (
                         <div className="flex items-center gap-2 rounded-md bg-muted p-2 text-xs text-primary">
                           <FileText className="size-4" />
-                          <span className="truncate">{t("jobs.document_attached")}</span>
+                          <span className="truncate">{t("jobs_page.document_attached")}</span>
                         </div>
                       ) : (
                         <div className="relative">
@@ -202,8 +198,8 @@ function JobsPage() {
                           <Button variant="outline" className="w-full pointer-events-none">
                             <Upload className="mr-2 size-4" />
                             {uploading === j.id
-                              ? t("jobs.uploading")
-                              : t("jobs.choose_file")}
+                              ? t("jobs_page.uploading")
+                              : t("jobs_page.choose_file")}
                           </Button>
                         </div>
                       )}
@@ -220,13 +216,13 @@ function JobsPage() {
                       {applied
                         ? t("staff_actions.applied") + " ✓"
                         : uploading === j.id
-                          ? t("jobs.uploading")
+                          ? t("jobs_page.uploading")
                           : t("staff_actions.apply")}
                     </Button>
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    {t("jobs.only_staff_apply")}
+                    {t("jobs_page.only_staff_apply")}
                   </p>
                 )}
               </Card>
