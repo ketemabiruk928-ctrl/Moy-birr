@@ -37,42 +37,28 @@ export function AppHeader({ title, subtitle }: { title: string; subtitle?: strin
 
   return (
     <header className="bg-gradient-primary px-5 pt-6 pb-8 text-primary-foreground">
-      <div className="mx-auto flex w-full max-w-lg flex-col items-center gap-3">
-        
-        {/* Logo and Title Stacked Vertically */}
-        <div className="flex flex-col items-center gap-2">
+      <div className="mx-auto flex w-full max-w-lg items-start justify-between gap-4">
+
+        {/* LEFT SIDE: Logo, Greeting, Subtitle (Stacked) */}
+        <div className="flex flex-col items-start gap-1">
           <img
             src="/logo.png"
             alt="Moybirr"
-            className="h-12 w-auto rounded-lg bg-white/95 object-contain p-1"
+            className="h-10 w-auto rounded-lg bg-white/95 object-contain p-1"
           />
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-            {subtitle ? <p className="mt-1 text-sm opacity-90">{subtitle}</p> : null}
-          </div>
+          <h1 className="text-xl font-bold tracking-tight mt-1">{title}</h1>
+          {subtitle ? (
+            <p className="text-[11px] opacity-90">{subtitle}</p>
+          ) : null}
         </div>
 
-        {/* Notifications and Language Controls Row */}
-        <div className="flex items-center gap-2">
-          {user ? (
-            <Link
-              to="/notifications"
-              className="relative flex size-9 items-center justify-center rounded-full border border-primary-foreground/40"
-              aria-label="Notifications"
-            >
-              <Bell className="size-4" />
-              {(unread.data ?? 0) > 0 ? (
-                <span className="absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
-                  {unread.data! > 99 ? "99+" : unread.data}
-                </span>
-              ) : null}
-            </Link>
-          ) : null}
+        {/* RIGHT SIDE: Language on top, Notification below (Stacked) */}
+        <div className="flex flex-col items-end gap-3">
           <select
             value={lang}
             onChange={(e) => setLang(e.target.value as typeof lang)}
             aria-label="Language"
-            className="rounded-full border border-primary-foreground/40 bg-transparent px-3 py-1 text-xs font-semibold text-primary-foreground"
+            className="rounded-full border border-primary-foreground/40 bg-transparent px-3 py-1 text-[10px] font-semibold text-primary-foreground"
           >
             {languages.map((l) => (
               <option key={l.code} value={l.code} className="text-foreground">
@@ -80,6 +66,21 @@ export function AppHeader({ title, subtitle }: { title: string; subtitle?: strin
               </option>
             ))}
           </select>
+
+          {user ? (
+            <Link
+              to="/notifications"
+              className="relative flex size-10 items-center justify-center rounded-full border border-primary-foreground/40"
+              aria-label="Notifications"
+            >
+              <Bell className="size-5" />
+              {(unread.data ?? 0) > 0 ? (
+                <span className="absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                  {unread.data! > 99 ? "99+" : unread.data}
+                </span>
+              ) : null}
+            </Link>
+          ) : null}
         </div>
 
       </div>
