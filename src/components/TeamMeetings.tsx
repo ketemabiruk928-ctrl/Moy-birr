@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { useLang } from "@/lib/i18n";
 
 type Meeting = {
   id: string;
@@ -22,12 +23,6 @@ type Meeting = {
   status: string;
   created_by_name: string | null;
 };
-
-const PROVIDERS = [
-  { key: "jitsi", label: "Moybirr video", hint: "A private room is created for you" },
-  { key: "zoom", label: "Zoom", hint: "Paste your own meeting link" },
-  { key: "daily", label: "Daily", hint: "Paste your own meeting link" },
-];
 
 function whenLabel(iso: string) {
   return new Date(iso).toLocaleString([], {
@@ -46,6 +41,7 @@ export function TeamMeetings({
   hotelId: string;
   canSchedule: boolean;
 }) {
+  const { t } = useLang();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -54,6 +50,24 @@ export function TeamMeetings({
   const [duration, setDuration] = useState("30");
   const [provider, setProvider] = useState("jitsi");
   const [link, setLink] = useState("");
+
+  const PROVIDERS = [
+    {
+      key: "jitsi",
+      label: t("meetings.provider_jitsi"),
+      hint: t("meetings.provider_jitsi_hint"),
+    },
+    {
+      key: "zoom",
+      label: t("meetings.provider_zoom"),
+      hint: t("meetings.provider_zoom_hint"),
+    },
+    {
+      key: "daily",
+      label: t("meetings.provider_daily"),
+      hint: t("meetings.provider_daily_hint"),
+    },
+  ];
 
   const meetings = useQuery({
     queryKey: ["team-meetings", hotelId],
@@ -81,7 +95,7 @@ export function TeamMeetings({
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Meeting set — your team has been texted");
+      toast.success(t("meetings.success_scheduled"));
       setOpen(false);
       setTitle("");
       setAgenda("");
@@ -98,7 +112,7 @@ export function TeamMeetings({
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Meeting cancelled");
+      toast.success(t("meetings.success_cancelled"));
       void qc.invalidateQueries({ queryKey: ["team-meetings", hotelId] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -111,21 +125,21 @@ export function TeamMeetings({
       {canSchedule ? (
         open ? (
           <Card className="space-y-3 p-4">
-            <p className="text-sm font-semibold">New meeting</p>
+            <p className="text-sm font-semibold">{t("meetings.new_meeting")}</p>
 
             <div className="space-y-1.5">
-              <Label htmlFor="mt">Title</Label>
+              <Label htmlFor="mt">{t("meetings.title_label")}</Label>
               <Input
                 id="mt"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Monday briefing"
+                placeholder={t("meetings.title_placeholder")}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="ms">Starts</Label>
+                <Label htmlFor="ms">{t("meetings.starts_label")}</Label>
                 <Input
                   id="ms"
                   type="datetime-local"
@@ -134,7 +148,7 @@ export function TeamMeetings({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="md">Minutes</Label>
+                <Label htmlFor="md">{t("meetings.minutes_label")}</Label>
                 <Input
                   id="md"
                   type="number"
@@ -147,7 +161,7 @@ export function TeamMeetings({
             </div>
 
             <div className="space-y-1.5">
-              <Label>Where</Label>
+              <Label>{t("meetings.where_label")}</Label>
               <div className="flex flex-wrap gap-2">
                 {PROVIDERS.map((p) => (
                   <Button
@@ -168,7 +182,7 @@ export function TeamMeetings({
 
             {provider !== "jitsi" ? (
               <div className="space-y-1.5">
-                <Label htmlFor="ml">Meeting link</Label>
+                <Label htmlFor="ml">{t("meetings.link_label")}</Label>
                 <Input
                   id="ml"
                   value={link}
@@ -179,13 +193,13 @@ export function TeamMeetings({
             ) : null}
 
             <div className="space-y-1.5">
-              <Label htmlFor="ma">Agenda (optional)</Label>
+              <Label htmlFor="ma">{t("meetings.agenda_label")}</Label>
               <Textarea
                 id="ma"
                 rows={2}
                 value={agenda}
                 onChange={(e) => setAgenda(e.target.value)}
-                placeholder="Stock, rota, complaints from last week"
+                placeholder={t("meetings.agenda_placeholder")}
               />
             </div>
 
@@ -195,29 +209,29 @@ export function TeamMeetings({
                 disabled={create.isPending || title.trim().length < 2 || !startsAt}
                 onClick={() => create.mutate()}
               >
-                Schedule and invite the team
+                {t("meetings.schedule_btn")}
               </Button>
               <Button variant="ghost" onClick={() => setOpen(false)}>
-                Cancel
+                {t("wallet.cancel")}
               </Button>
             </div>
           </Card>
         ) : (
           <Button onClick={() => setOpen(true)} className="gap-2">
             <CalendarClock className="size-4" />
-            Call a meeting
+            {t("meetings.call_meeting_btn")}
           </Button>
         )
       ) : null}
 
       {meetings.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading meetings…</p>
+        <p className="text-sm text-muted-foreground">{t("meetings.loading")}</p>
       ) : null}
 
       {!meetings.isLoading && rows.length === 0 ? (
         <Card className="p-6 text-center">
           <Video className="mx-auto mb-2 size-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">No meetings coming up.</p>
+          <p className="text-sm text-muted-foreground">{t("meetings.empty")}</p>
         </Card>
       ) : null}
 
@@ -228,16 +242,20 @@ export function TeamMeetings({
           <Card key={m.id} className="space-y-2 p-4">
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-medium">{m.title}</p>
-              {cancelled ? <Badge variant="destructive">cancelled</Badge> : null}
-              {!cancelled && soon ? <Badge>starting soon</Badge> : null}
+              {cancelled ? (
+                <Badge variant="destructive">{t("status.cancelled")}</Badge>
+              ) : null}
+              {!cancelled && soon ? (
+                <Badge>{t("meetings.starting_soon")}</Badge>
+              ) : null}
               <span className="ml-auto text-xs text-muted-foreground">
-                {whenLabel(m.starts_at)} · {m.duration_min} min
+                {whenLabel(m.starts_at)} · {m.duration_min} {t("meetings.min")}
               </span>
             </div>
 
             {m.agenda ? <p className="text-sm text-muted-foreground">{m.agenda}</p> : null}
             <p className="text-xs text-muted-foreground">
-              Called by {m.created_by_name || "management"}
+              {t("meetings.called_by")} {m.created_by_name || t("meetings.management")}
             </p>
 
             {!cancelled ? (
@@ -245,12 +263,12 @@ export function TeamMeetings({
                 <Button asChild className="flex-1 gap-2">
                   <a href={m.join_url} target="_blank" rel="noreferrer">
                     <Video className="size-4" />
-                    Join
+                    {t("meetings.join_btn")}
                   </a>
                 </Button>
                 {canSchedule ? (
                   <Button variant="outline" onClick={() => cancel.mutate(m.id)}>
-                    Cancel
+                    {t("wallet.cancel")}
                   </Button>
                 ) : null}
               </div>
