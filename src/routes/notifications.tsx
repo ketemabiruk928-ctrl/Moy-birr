@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useLang } from "@/lib/i18n";
 import { AppHeader, AppShell, RequireAuth } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ type Notif = {
 };
 
 function NotificationsPage() {
+  const { t } = useLang();
   const { user } = useAuth();
   const qc = useQueryClient();
 
@@ -74,7 +76,7 @@ function NotificationsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("All marked as read");
+      toast.success(t("notifications.all_read"));
       void qc.invalidateQueries({ queryKey: ["notifications"] });
       void qc.invalidateQueries({ queryKey: ["unread-notifications"] });
     },
@@ -86,7 +88,10 @@ function NotificationsPage() {
 
   return (
     <>
-      <AppHeader title="Notifications" subtitle="Your Moybirr activity" />
+      <AppHeader
+        title={t("notifications.title")}
+        subtitle={t("notifications.subtitle")}
+      />
 
       <div className="-mt-6 space-y-3 px-4 pb-6">
         {hasUnread ? (
@@ -97,18 +102,18 @@ function NotificationsPage() {
             onClick={() => markAllRead.mutate()}
           >
             <CheckCheck className="mr-2 size-4" />
-            Mark all as read
+            {t("notifications.mark_all_read")}
           </Button>
         ) : null}
 
         {list.isLoading ? (
           <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-            Loading…
+            {t("notifications.loading")}
           </Card>
         ) : rows.length === 0 ? (
           <Card className="shadow-card flex flex-col items-center gap-2 p-6 text-center">
             <Bell className="size-7 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">No notifications yet.</p>
+            <p className="text-sm text-muted-foreground">{t("notifications.empty")}</p>
           </Card>
         ) : (
           rows.map((n) => {
@@ -122,7 +127,9 @@ function NotificationsPage() {
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-semibold">{n.title}</p>
                   <div className="flex items-center gap-1">
-                    {unread ? <Badge variant="default">New</Badge> : null}
+                    {unread ? (
+                      <Badge variant="default">{t("notifications.new")}</Badge>
+                    ) : null}
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">{n.body}</p>
