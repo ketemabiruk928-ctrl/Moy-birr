@@ -277,7 +277,8 @@
     "subtitle": "وظائف من أصحاب فنادق موثقين",
     "hotel": "فندق",
     "applied_via_moybirr": "تم التقديم عبر مويبير",
-    "upload_failed": "فشل تحميل المستند"
+    "upload_failed": "فشل تحميل المستند",
+    "no_vacancies": "لا توجد وظائف منشورة بعد."
   },
 
   "rooms": {
