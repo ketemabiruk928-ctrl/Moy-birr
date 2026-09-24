@@ -94,7 +94,10 @@ function HotelsPage() {
     )
     .map((h) => ({
       ...h,
-      dist: me && h.lat != null && h.lng != null ? distanceKm(me, { lat: h.lat, lng: h.lng }) : null,
+      dist:
+        me && h.lat != null && h.lng != null
+          ? distanceKm(me, { lat: h.lat, lng: h.lng })
+          : null,
     }))
     .sort((a, b) =>
       me && nearFirst ? (a.dist ?? 1e9) - (b.dist ?? 1e9) : a.name.localeCompare(b.name),
@@ -102,12 +105,12 @@ function HotelsPage() {
 
   return (
     <>
-      <AppHeader title={t("hotels")} subtitle="Book with your wallet, rate the hospitality" />
+      <AppHeader title={t("hotels")} subtitle={t("hotels_page.subtitle")} />
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
         <Card className="shadow-card p-4">
           <Input
-            placeholder="Search hotel or city…"
+            placeholder={t("hotels_page.search_placeholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -117,7 +120,11 @@ function HotelsPage() {
               className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold"
             >
               <Navigation className="size-3.5 text-primary" />
-              {status === "locating" ? "Locating…" : me ? "Refresh GPS" : "Use my location"}
+              {status === "locating"
+                ? t("hotels_page.locating")
+                : me
+                  ? t("hotels_page.refresh_gps")
+                  : t("hotels_page.use_location")}
             </button>
             <button
               onClick={() => setNearFirst((v) => !v)}
@@ -126,22 +133,22 @@ function HotelsPage() {
                 me && nearFirst ? "border-primary bg-accent" : "border-border"
               }`}
             >
-              Nearest first
+              {t("hotels_page.nearest_first")}
             </button>
             <Link
               to="/map"
               className="ml-auto flex items-center gap-1.5 rounded-full border border-primary px-3 py-1.5 text-xs font-semibold text-primary"
             >
               <MapIcon className="size-3.5" />
-              Map view
+              {t("hotels_page.map_view")}
             </Link>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             {me
-              ? "Distances measured from your GPS location"
+              ? t("hotels_page.distances_info")
               : status === "denied"
-                ? "Location blocked in your browser — enable it to see distances"
-                : "Allow location to see how far each hotel is"}
+                ? t("hotels_page.location_blocked")
+                : t("hotels_page.allow_location")}
           </p>
         </Card>
 
@@ -162,22 +169,26 @@ function HotelsPage() {
                     <p className="flex items-center gap-1 text-xs text-muted-foreground">
                       <MapPin className="size-3.5" />
                       {h.city}
-                      {dist != null ? ` · ${formatDistance(dist)} away` : ""}
+                      {dist != null
+                        ? ` · ${formatDistance(dist)} ${t("hotels_page.away")}`
+                        : ""}
                     </p>
                   </div>
                   <Badge variant="secondary" className="shrink-0">
                     <Star className="mr-1 size-3 fill-primary text-primary" />
-                    {avg ? avg.toFixed(1) : "New"}
+                    {avg ? avg.toFixed(1) : t("hotels_page.new")}
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">{h.description}</p>
                 <div className="flex items-center justify-between pt-1">
                   <p className="text-sm font-semibold">
-                    from {formatETB(h.price_from)}
-                    <span className="text-xs font-normal text-muted-foreground"> / night</span>
+                    {t("hotels_page.from")} {formatETB(h.price_from)}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {" "}/ {t("rooms.per_night")}
+                    </span>
                   </p>
                   <Button size="sm" onClick={() => setSelected(h.id)}>
-                    {t("book_now")}
+                    {t("booking.book_now")}
                   </Button>
                 </div>
               </div>
@@ -221,7 +232,7 @@ function BookingDialog({ hotelId, onClose }: { hotelId: string | null; onClose: 
     queryFn: async () => {
       const { data, error } = await supabase
         .from("hotel_media")
-        .select("id,kind,url,caption")
+        .select("id,kind,url,video_url,caption")
         .eq("hotel_id", hotelId!)
         .order("sort_order");
       if (error) throw error;
@@ -245,7 +256,6 @@ function BookingDialog({ hotelId, onClose }: { hotelId: string | null; onClose: 
     enabled: !!hotelId,
   });
 
-
   const room = (rooms.data ?? []).find((r) => r.id === roomId);
   const nights = Math.max(
     1,
@@ -263,7 +273,7 @@ function BookingDialog({ hotelId, onClose }: { hotelId: string | null; onClose: 
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Booking confirmed — confirmation SMS sent");
+      toast.success(t("booking.confirmed_sms"));
       void qc.invalidateQueries({ queryKey: ["wallet"] });
       void qc.invalidateQueries({ queryKey: ["bookings"] });
       void qc.invalidateQueries({ queryKey: ["transactions"] });
@@ -276,8 +286,8 @@ function BookingDialog({ hotelId, onClose }: { hotelId: string | null; onClose: 
     <Dialog open={!!hotelId} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{t("book_now")}</DialogTitle>
-          <DialogDescription>Pay from your Moybirr wallet. Free cancellation up to 24h before check-in.</DialogDescription>
+          <DialogTitle>{t("booking.book_now")}</DialogTitle>
+          <DialogDescription>{t("booking.pay_desc")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -287,13 +297,13 @@ function BookingDialog({ hotelId, onClose }: { hotelId: string | null; onClose: 
                 <figure key={m.id} className="w-52 shrink-0 snap-start">
                   {m.kind === "video" ? (
                     <MediaVideo
-                      src={m.url}
+                      src={m.video_url || m.url}
                       className="h-32 w-52 rounded-xl bg-muted object-cover"
                     />
                   ) : (
                     <MediaImg
                       src={m.url}
-                      alt={m.caption ?? "Hotel service"}
+                      alt={m.caption ?? t("showcase.photo")}
                       className="h-32 w-52 rounded-xl object-cover"
                     />
                   )}
@@ -308,7 +318,7 @@ function BookingDialog({ hotelId, onClose }: { hotelId: string | null; onClose: 
           ) : null}
 
           <div className="space-y-2">
-            <Label>Room type</Label>
+            <Label>{t("rooms.room_type")}</Label>
             {(rooms.data ?? []).map((r) => (
               <button
                 key={r.id}
@@ -320,7 +330,7 @@ function BookingDialog({ hotelId, onClose }: { hotelId: string | null; onClose: 
                 <span>
                   <span className="text-sm font-medium">{r.room_type}</span>
                   <span className="block text-xs text-muted-foreground">
-                    Up to {r.capacity} guests
+                    {t("rooms.up_to_guests", { count: r.capacity })}
                   </span>
                 </span>
                 <span className="text-sm font-semibold">{formatETB(r.price)}</span>
@@ -330,7 +340,7 @@ function BookingDialog({ hotelId, onClose }: { hotelId: string | null; onClose: 
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="ci">{t("check_in")}</Label>
+              <Label htmlFor="ci">{t("booking.check_in")}</Label>
               <Input
                 id="ci"
                 type="date"
@@ -339,7 +349,7 @@ function BookingDialog({ hotelId, onClose }: { hotelId: string | null; onClose: 
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="co">{t("check_out")}</Label>
+              <Label htmlFor="co">{t("booking.check_out")}</Label>
               <Input
                 id="co"
                 type="date"
@@ -352,12 +362,12 @@ function BookingDialog({ hotelId, onClose }: { hotelId: string | null; onClose: 
           <div className="rounded-xl bg-muted p-4">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">
-                {nights} night{nights > 1 ? "s" : ""}
+                {t("booking.nights", { count: nights })}
               </span>
               <span>{room ? formatETB(room.price) : "—"}</span>
             </div>
             <div className="mt-2 flex justify-between border-t border-border pt-2 font-bold">
-              <span>{t("total")}</span>
+              <span>{t("booking.total")}</span>
               <span>{formatETB(total)}</span>
             </div>
           </div>
@@ -368,12 +378,14 @@ function BookingDialog({ hotelId, onClose }: { hotelId: string | null; onClose: 
             disabled={!roomId || !user || book.isPending}
             onClick={() => book.mutate()}
           >
-            Pay {formatETB(total)} from wallet
+            {t("booking.pay_from_wallet", { amount: formatETB(total) })}
           </Button>
 
           {(reviews.data ?? []).length > 0 ? (
             <div className="space-y-2 border-t border-border pt-4">
-              <p className="text-sm font-semibold">{t("rate_hotel")} · guest reviews</p>
+              <p className="text-sm font-semibold">
+                {t("staff_actions.rate_hotel")} · {t("booking.guest_reviews")}
+              </p>
               {(reviews.data ?? []).map((r) => (
                 <div key={r.id} className="rounded-xl bg-muted p-3">
                   <p className="flex items-center gap-0.5">
