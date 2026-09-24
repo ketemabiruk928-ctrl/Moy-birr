@@ -9,30 +9,32 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useLang } from "@/lib/i18n";
 
 /** Camera QR scanner. The engine is imported lazily so SSR never touches it. */
 export function QrScanButton({
   onResult,
-  label = "Scan QR code",
+  label,
 }: {
   onResult: (text: string) => void;
   label?: string;
 }) {
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
+  const displayLabel = label ?? t("qr_scanner.scan_button");
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="lg" className="w-full">
           <ScanLine className="mr-2 size-5" />
-          {label}
+          {displayLabel}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Scan QR code</DialogTitle>
-          <DialogDescription>
-            Point your camera at the table, reception or staff QR code.
-          </DialogDescription>
+          <DialogTitle>{t("qr_scanner.title")}</DialogTitle>
+          <DialogDescription>{t("qr_scanner.desc")}</DialogDescription>
         </DialogHeader>
         {open ? (
           <ScannerView
@@ -48,6 +50,7 @@ export function QrScanButton({
 }
 
 function ScannerView({ onResult }: { onResult: (text: string) => void }) {
+  const { t } = useLang();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,7 +73,7 @@ function ScannerView({ onResult }: { onResult: (text: string) => void }) {
         await instance.start();
         if (stopped) instance.stop();
       } catch {
-        setError("Camera unavailable. Allow camera access or pick the place manually.");
+        setError(t("qr_scanner.camera_unavailable"));
       }
     })();
 
@@ -79,7 +82,7 @@ function ScannerView({ onResult }: { onResult: (text: string) => void }) {
       scanner?.stop();
       scanner?.destroy();
     };
-  }, [onResult]);
+  }, [onResult, t]);
 
   if (error) {
     return (
@@ -95,7 +98,7 @@ function ScannerView({ onResult }: { onResult: (text: string) => void }) {
       <video ref={videoRef} className="aspect-square w-full object-cover" muted playsInline />
       <p className="flex items-center justify-center gap-1.5 p-2 text-xs text-muted-foreground">
         <Camera className="size-3.5" />
-        Looking for a Moybirr QR code…
+        {t("qr_scanner.looking")}
       </p>
     </div>
   );
