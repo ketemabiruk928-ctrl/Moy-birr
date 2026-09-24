@@ -4,6 +4,7 @@ import { MessageSquare, Reply, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { useLang } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +24,7 @@ type FeedbackRow = {
 };
 
 export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
+  const { t } = useLang();
   const qc = useQueryClient();
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [reply, setReply] = useState("");
@@ -49,7 +51,7 @@ export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Reply sent — the guest gets it by SMS");
+      toast.success(t("feedback.reply_sent"));
       setReplyTo(null);
       setReply("");
       void qc.invalidateQueries({ queryKey: ["owner-feedback", hotelId] });
@@ -82,23 +84,20 @@ export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
             size="sm"
             variant={filter === f ? "default" : "outline"}
             onClick={() => setFilter(f)}
-            className="capitalize"
           >
-            {f}
+            {t(`feedback.filter_${f}`)}
           </Button>
         ))}
       </div>
 
       {feedback.isLoading ? (
         <Card className="p-6 text-center text-sm text-muted-foreground">
-          Loading messages…
+          {t("feedback.loading")}
         </Card>
       ) : rows.length === 0 ? (
         <Card className="flex flex-col items-center gap-2 p-6 text-center">
           <MessageSquare className="size-6 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            No guest messages yet.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("feedback.empty")}</p>
         </Card>
       ) : (
         rows.map((f) => (
@@ -106,7 +105,7 @@ export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm font-semibold">
-                  {f.guest_name || "Guest"}
+                  {f.guest_name || t("feedback.guest")}
                   {f.guest_phone ? (
                     <span className="ml-2 text-xs font-normal text-muted-foreground">
                       {f.guest_phone}
@@ -114,7 +113,9 @@ export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
                   ) : null}
                 </p>
                 {f.staff_name ? (
-                  <p className="text-xs text-muted-foreground">About: {f.staff_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("feedback.about")}: {f.staff_name}
+                  </p>
                 ) : null}
               </div>
               <Badge
@@ -126,7 +127,7 @@ export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
                       : "outline"
                 }
               >
-                {f.status}
+                {t(`feedback.status_${f.status}`)}
               </Badge>
             </div>
 
@@ -134,7 +135,9 @@ export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
 
             {f.owner_reply ? (
               <div className="rounded-lg bg-muted p-3">
-                <p className="text-xs font-medium text-muted-foreground">Your reply</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  {t("feedback.your_reply")}
+                </p>
                 <p className="mt-1 whitespace-pre-wrap text-sm">{f.owner_reply}</p>
               </div>
             ) : null}
@@ -150,7 +153,7 @@ export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
                   rows={3}
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
-                  placeholder="Write your reply — the guest gets it by SMS…"
+                  placeholder={t("feedback.reply_placeholder")}
                 />
                 <div className="flex gap-2">
                   <Button
@@ -158,7 +161,7 @@ export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
                     disabled={reply.trim().length < 2 || sendReply.isPending}
                     onClick={() => sendReply.mutate(f.id)}
                   >
-                    Send reply
+                    {t("feedback.send_reply")}
                   </Button>
                   <Button
                     size="sm"
@@ -168,7 +171,7 @@ export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
                       setReply("");
                     }}
                   >
-                    Cancel
+                    {t("wallet.cancel")}
                   </Button>
                 </div>
               </div>
@@ -183,7 +186,7 @@ export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
                   }}
                 >
                   <Reply className="mr-1 size-3.5" />
-                  {f.owner_reply ? "Edit reply" : "Reply"}
+                  {f.owner_reply ? t("feedback.edit_reply") : t("feedback.reply")}
                 </Button>
                 {f.status !== "resolved" ? (
                   <Button
@@ -193,7 +196,7 @@ export function OwnerFeedbackInbox({ hotelId }: { hotelId: string }) {
                     onClick={() => setStatus.mutate({ id: f.id, status: "resolved" })}
                   >
                     <CheckCircle2 className="mr-1 size-3.5" />
-                    Mark resolved
+                    {t("feedback.mark_resolved")}
                   </Button>
                 ) : null}
               </div>
