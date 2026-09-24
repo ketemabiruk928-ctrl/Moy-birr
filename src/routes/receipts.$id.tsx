@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { formatETB } from "@/lib/i18n";
+import { formatETB, useLang } from "@/lib/i18n";
 import { AppHeader, AppShell, RequireAuth } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,6 +21,7 @@ export const Route = createFileRoute("/receipts/$id")({
 });
 
 function ReceiptDetailPage() {
+  const { t } = useLang();
   const { id } = useParams({ from: "/receipts/$id" });
   const { user } = useAuth();
 
@@ -62,38 +63,43 @@ function ReceiptDetailPage() {
     try {
       if (navigator.share) {
         await navigator.share({
-          title: `Moybirr receipt ${r.receipt_no}`,
-          text: `Receipt for ${formatETB(r.amount)}`,
+          title: `${t("receipt_detail.share_title")} ${r.receipt_no}`,
+          text: t("receipt_detail.share_text", { amount: formatETB(r.amount) }),
           url,
         });
       } else {
         await navigator.clipboard.writeText(url);
-        toast.success("Receipt link copied");
+        toast.success(t("receipt_detail.link_copied"));
       }
     } catch {
       // user cancelled — ignore
     }
   };
 
+  const typeLabel = tx?.type ? t(`tx.${tx.type}`) || tx.type : t("receipts.payment");
+
   return (
     <>
-      <AppHeader title="Receipt" subtitle={r?.receipt_no ?? "Loading…"} />
+      <AppHeader
+        title={t("receipt_detail.title")}
+        subtitle={r?.receipt_no ?? t("loading")}
+      />
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
         <Link
           to="/receipts"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground"
         >
-          <ArrowLeft className="size-4" /> All receipts
+          <ArrowLeft className="size-4" /> {t("receipt_detail.all_receipts")}
         </Link>
 
         {receipt.isLoading ? (
           <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-            Loading…
+            {t("loading")}
           </Card>
         ) : !r ? (
           <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-            Receipt not found.
+            {t("receipt_detail.not_found")}
           </Card>
         ) : (
           <>
@@ -103,38 +109,41 @@ function ReceiptDetailPage() {
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
                   Moybirr
                 </p>
-                <p className="mt-1 text-lg font-bold">Payment Receipt</p>
+                <p className="mt-1 text-lg font-bold">
+                  {t("receipt_detail.payment_receipt")}
+                </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">{r.receipt_no}</p>
               </div>
 
               <div className="mt-6 space-y-3 text-sm">
-                <Row label="Date">
+                <Row label={t("receipt_detail.date")}>
                   {new Date(r.created_at).toLocaleString()}
                 </Row>
-                <Row label="Type">
-                  <span className="capitalize">{tx?.type ?? "payment"}</span>
+                <Row label={t("receipt_detail.type")}>
+                  <span className="capitalize">{typeLabel}</span>
                 </Row>
                 {tx?.hotels?.name ? (
-                  <Row label="Location">
+                  <Row label={t("receipt_detail.location")}>
                     {tx.hotels.name}
                     {tx.hotels.city ? ` · ${tx.hotels.city}` : ""}
                   </Row>
                 ) : null}
-                <Row label="Your role on this receipt">
+                <Row label={t("receipt_detail.your_role")}>
                   <span className="capitalize">{r.role_on_receipt}</span>
                 </Row>
-                {r.note ? <Row label="Note">{r.note}</Row> : null}
+                {r.note ? (
+                  <Row label={t("receipt_detail.note")}>{r.note}</Row>
+                ) : null}
               </div>
 
               <div className="mt-6 border-t border-border pt-4">
-                <Row label="Amount" bold>
+                <Row label={t("receipt_detail.amount")} bold>
                   {formatETB(r.amount)}
                 </Row>
               </div>
 
               <p className="mt-8 text-center text-[10px] text-muted-foreground">
-                This receipt was issued by Moybirr on behalf of the merchant.
-                Keep it for your records.
+                {t("receipt_detail.footer")}
               </p>
             </Card>
 
@@ -142,11 +151,11 @@ function ReceiptDetailPage() {
             <div className="grid grid-cols-2 gap-2 print:hidden">
               <Button variant="outline" onClick={printReceipt}>
                 <Download className="mr-2 size-4" />
-                Save / print
+                {t("receipt_detail.save_print")}
               </Button>
               <Button variant="outline" onClick={shareReceipt}>
                 <Share2 className="mr-2 size-4" />
-                Share
+                {t("receipt_detail.share")}
               </Button>
             </div>
           </>
