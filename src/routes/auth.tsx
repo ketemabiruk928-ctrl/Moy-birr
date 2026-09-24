@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, Globe } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizePhone, phoneToEmail, useAuth, type Role } from "@/lib/auth";
-import { useLang } from "@/lib/i18n";
+import { useLang, languages } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,14 +30,8 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
-const roles: { value: Role; label: string; hint: string }[] = [
-  { value: "guest", label: "Guest / Customer", hint: "Pay bills, tip staff, book hotels" },
-  { value: "staff", label: "Staff", hint: "Receive tips straight to your wallet" },
-  { value: "owner", label: "Hotel Owner", hint: "List rooms, hire staff, see revenue" },
-];
-
 function AuthPage() {
-  const { t } = useLang();
+  const { t, lang, setLang } = useLang();
   const { session, refresh } = useAuth();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -57,6 +51,25 @@ function AuthPage() {
     void navigate({ to: "/" });
   }
 
+  // Build role options from translations
+  const roles: { value: Role; label: string; hint: string }[] = [
+    {
+      value: "guest",
+      label: t("role_guest"),
+      hint: t("role_guest_hint"),
+    },
+    {
+      value: "staff",
+      label: t("role_staff"),
+      hint: t("role_staff_hint"),
+    },
+    {
+      value: "owner",
+      label: t("role_owner"),
+      hint: t("role_owner_hint"),
+    },
+  ];
+
   const login = async () => {
     setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({
@@ -65,41 +78,39 @@ function AuthPage() {
     });
     setBusy(false);
     if (error) {
-      alert(JSON.stringify(error, null, 2));
-      toast.error("Could not log in. Check your phone number and password.");
+      toast.error(t("error_login"));
       return;
     }
     await refresh();
-    toast.success("Welcome back to Moybirr");
+    toast.success(t("success_welcome_back"));
     void navigate({ to: "/" });
   };
 
   const register = async () => {
     const digits = phone.replace(/\D/g, "");
 
-    // Temporary: only authorized phone can create accounts
     const allowed = [
       "0963154217", "963154217", "251963154217",
       "0904170140", "904170140", "251904170140",
       "0913968525", "913968525", "251913968525",
     ];
     if (!allowed.includes(digits)) {
-      toast.error("New account registration is temporarily closed. Only authorized numbers can register.");
+      toast.error(t("error_registration_closed"));
       return;
     }
 
     if (digits.length < 9) {
-      toast.error("Enter a valid Ethiopian phone number");
+      toast.error(t("error_invalid_phone"));
       return;
     }
     if (password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+      toast.error(t("error_password_short"));
       return;
     }
 
     if (role === "staff") {
       if (!staffCity.trim() || !staffSubcity.trim() || !staffHotelName.trim() || !staffHotelCode.trim()) {
-        toast.error("Staff must fill city, subcity, hotel name and Hotel ID");
+        toast.error(t("error_staff_fields"));
         return;
       }
     }
@@ -156,7 +167,7 @@ function AuthPage() {
 
     setBusy(false);
     await refresh();
-    toast.success("Account created — your wallet is ready!");
+    toast.success(t("success_account_created"));
     void navigate({ to: "/" });
   };
 
@@ -164,14 +175,29 @@ function AuthPage() {
     <div className="min-h-screen bg-background">
       <div className="bg-gradient-primary px-6 pt-14 pb-12 text-primary-foreground">
         <div className="mx-auto w-full max-w-lg">
-          <img
-            src="/logo.png"
-            alt="Moybirr"
-            className="h-14 w-auto"
-          />
-          <h1 className="mt-5 text-3xl font-bold tracking-tight">Moybirr</h1>
+          {/* Language picker at the top right */}
+          <div className="flex justify-end">
+            <div className="flex items-center gap-1.5 rounded-full border border-primary-foreground/40 bg-transparent px-3 py-1">
+              <Globe className="size-3.5" />
+              <select
+                value={lang}
+                onChange={(e) => setLang(e.target.value as typeof lang)}
+                aria-label="Language"
+                className="bg-transparent text-xs font-semibold text-primary-foreground outline-none"
+              >
+                {languages.map((l) => (
+                  <option key={l.code} value={l.code} className="text-foreground">
+                    {l.flag} {l.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <img src="/logo.png" alt="Moybirr" className="h-14 w-auto mt-2" />
+          <h1 className="mt-5 text-3xl font-bold tracking-tight">{t("auth.app_title")}</h1>
           <p className="mt-2 max-w-xs text-sm opacity-90">{t("app_tagline")}</p>
-          <p className="mt-1 text-xs opacity-75">by Biruk Ketema</p>
+          <p className="mt-1 text-xs opacity-75">{t("auth.app_author")}</p>
         </div>
       </div>
 
@@ -179,13 +205,13 @@ function AuthPage() {
         <Card className="shadow-card p-5">
           <Tabs defaultValue="login">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">{t("login")}</TabsTrigger>
-              <TabsTrigger value="register">{t("register")}</TabsTrigger>
+              <TabsTrigger value="login">{t("auth.login")}</TabsTrigger>
+              <TabsTrigger value="register">{t("auth.register")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="login" className="mt-5 space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="lphone">{t("phone")}</Label>
+                <Label htmlFor="lphone">{t("auth.phone")}</Label>
                 <Input
                   id="lphone"
                   inputMode="tel"
@@ -195,7 +221,7 @@ function AuthPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="lpass">{t("password")}</Label>
+                <Label htmlFor="lpass">{t("auth.password")}</Label>
                 <Input
                   id="lpass"
                   type="password"
@@ -204,17 +230,17 @@ function AuthPage() {
                 />
               </div>
               <Button className="w-full" size="lg" disabled={busy} onClick={login}>
-                {t("login")}
+                {t("auth.login")}
               </Button>
             </TabsContent>
 
             <TabsContent value="register" className="mt-5 space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="rname">{t("full_name")}</Label>
+                <Label htmlFor="rname">{t("auth.full_name")}</Label>
                 <Input id="rname" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="rphone">{t("phone")}</Label>
+                <Label htmlFor="rphone">{t("auth.phone")}</Label>
                 <Input
                   id="rphone"
                   inputMode="tel"
@@ -224,7 +250,7 @@ function AuthPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="rpass">{t("password")}</Label>
+                <Label htmlFor="rpass">{t("auth.password")}</Label>
                 <Input
                   id="rpass"
                   type="password"
@@ -233,7 +259,7 @@ function AuthPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t("role")}</Label>
+                <Label>{t("auth.role_label")}</Label>
                 <div className="grid gap-2">
                   {roles.map((r) => (
                     <button
@@ -255,17 +281,27 @@ function AuthPage() {
 
               {role === "staff" ? (
                 <div className="space-y-3 rounded-xl border border-border p-3">
-                  <p className="text-xs font-semibold text-muted-foreground">Staff workplace details</p>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    {t("auth.staff_workplace")}
+                  </p>
                   <div className="space-y-1.5">
-                    <Label>City</Label>
-                    <Input value={staffCity} onChange={(e) => setStaffCity(e.target.value)} placeholder="Addis Ababa" />
+                    <Label>{t("auth.city")}</Label>
+                    <Input
+                      value={staffCity}
+                      onChange={(e) => setStaffCity(e.target.value)}
+                      placeholder="Addis Ababa"
+                    />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Subcity</Label>
-                    <Input value={staffSubcity} onChange={(e) => setStaffSubcity(e.target.value)} placeholder="Bole" />
+                    <Label>{t("auth.subcity")}</Label>
+                    <Input
+                      value={staffSubcity}
+                      onChange={(e) => setStaffSubcity(e.target.value)}
+                      placeholder="Bole"
+                    />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Current hotel / workplace name</Label>
+                    <Label>{t("auth.workplace_name")}</Label>
                     <Input
                       value={staffHotelName}
                       onChange={(e) => setStaffHotelName(e.target.value)}
@@ -273,7 +309,7 @@ function AuthPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Hotel ID (from owner / Moybirr)</Label>
+                    <Label>{t("auth.hotel_id")}</Label>
                     <Input
                       value={staffHotelCode}
                       onChange={(e) => setStaffHotelCode(e.target.value.toUpperCase())}
@@ -284,11 +320,11 @@ function AuthPage() {
               ) : null}
 
               <Button className="w-full" size="lg" disabled={busy} onClick={register}>
-                {t("register")}
+                {t("auth.register")}
               </Button>
               <p className="flex items-start gap-2 text-xs text-muted-foreground">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
-                Your phone number is your Moybirr ID. A free wallet is created automatically.
+                {t("auth.wallet_notice")}
               </p>
             </TabsContent>
           </Tabs>
