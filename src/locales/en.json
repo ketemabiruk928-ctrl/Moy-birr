@@ -257,7 +257,7 @@
     "tab_jobs": "Jobs"
   },
 
-  "jobs": {
+  "jobs_page": {
     "no_jobs": "No open vacancies right now. Check back soon.",
     "hiring_banner": "Hiring? Post a vacancy for 200 ETB",
     "hiring_banner_desc": "Requires an active premium subscription.",
@@ -277,7 +277,8 @@
     "subtitle": "Vacancies from verified hotel owners",
     "hotel": "Hotel",
     "applied_via_moybirr": "Applied via Moybirr",
-    "upload_failed": "Failed to upload document"
+    "upload_failed": "Failed to upload document",
+    "no_vacancies": "No vacancies posted yet."
   },
 
   "rooms": {
@@ -345,7 +346,7 @@
     "your_hotel": "Your hotel",
     "approved_tips": "Approved · you can receive tips",
     "waiting_approval": "Waiting for approval",
-    "pending_hint": "You asked to join {{hotel}}. Your owner has to approve you.",
+    "pending_hint": "You asked to join {{hotel}}.",
     "a_hotel": "a hotel",
     "link_workplace": "Link your workplace",
     "rejected_hint": "Your last request was rejected.",
@@ -386,7 +387,7 @@
     "title": "My Receipts",
     "subtitle": "Every payment, tip, and booking",
     "loading": "Loading receipts…",
-    "empty": "No receipts yet. Once you make a payment or receive a tip, it appears here.",
+    "empty": "No receipts yet.",
     "payment": "payment"
   },
 
