@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -31,7 +31,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -62,19 +61,6 @@ function errorText(json: unknown, fallback: string): string {
   }
   return fallback;
 }
-
-const typeMeta: Record<string, { label: string; icon: typeof Send; tone: string }> = {
-  deposit: { label: "Deposit", icon: ArrowDownLeft, tone: "text-success" },
-  withdraw: { label: "Withdraw", icon: ArrowUpRight, tone: "text-destructive" },
-  transfer: { label: "Transfer", icon: Send, tone: "text-foreground" },
-  tip: { label: "Tip", icon: Gift, tone: "text-primary" },
-  service_payment: { label: "Service payment", icon: QrCode, tone: "text-foreground" },
-  booking: { label: "Hotel booking", icon: Landmark, tone: "text-foreground" },
-  refund: { label: "Refund", icon: ArrowDownLeft, tone: "text-success" },
-  job_fee: { label: "Job posting fee", icon: Banknote, tone: "text-destructive" },
-  subscription: { label: "Premium subscription", icon: Banknote, tone: "text-destructive" },
-  platform_fee: { label: "Platform fee", icon: Banknote, tone: "text-muted-foreground" },
-};
 
 function HomePage() {
   return (
@@ -125,25 +111,46 @@ function Wallet() {
     void qc.invalidateQueries({ queryKey: ["transactions"] });
   };
 
+  // Build transaction type labels from translations
+  const typeMeta: Record<string, { label: string; icon: typeof Send; tone: string }> = {
+    deposit: { label: t("tx.deposit"), icon: ArrowDownLeft, tone: "text-success" },
+    withdraw: { label: t("tx.withdraw"), icon: ArrowUpRight, tone: "text-destructive" },
+    transfer: { label: t("tx.transfer"), icon: Send, tone: "text-foreground" },
+    tip: { label: t("tx.tip"), icon: Gift, tone: "text-primary" },
+    service_payment: { label: t("tx.service_payment"), icon: QrCode, tone: "text-foreground" },
+    booking: { label: t("tx.booking"), icon: Landmark, tone: "text-foreground" },
+    refund: { label: t("tx.refund"), icon: ArrowDownLeft, tone: "text-success" },
+    job_fee: { label: t("tx.job_fee"), icon: Banknote, tone: "text-destructive" },
+    subscription: { label: t("tx.subscription"), icon: Banknote, tone: "text-destructive" },
+    platform_fee: { label: t("tx.platform_fee"), icon: Banknote, tone: "text-muted-foreground" },
+  };
+
+  const roleSubtitle =
+    role === "staff"
+      ? t("wallet.subtitle_staff")
+      : role === "owner"
+        ? t("wallet.subtitle_owner")
+        : t("app_tagline");
+
   return (
     <>
       <AppHeader
-        title={`ሰላም, ${profile?.full_name?.split(" ")[0] || "Moybirr"}`}
-        subtitle={role === "staff" ? "Staff account" : role === "owner" ? "Hotel owner" : t("app_tagline")}
+        title={`${t("wallet.hello")}, ${profile?.full_name?.split(" ")[0] || "Moybirr"}`}
+        subtitle={roleSubtitle}
       />
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
         <Card className="shadow-card p-5">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("balance")}
+              {t("wallet.balance")}
             </p>
             <button onClick={() => setHidden((h) => !h)} className="text-muted-foreground">
               {hidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </div>
           <p className="mt-1 text-3xl font-bold tracking-tight">
-            {hidden ? "•••••• ETB" : formatETB(wallet.data?.balance)}
+            {hidden ? t("wallet.balance_hidden") : formatETB(wallet.data?.balance)}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{profile?.phone}</p>
 
@@ -157,7 +164,7 @@ function Wallet() {
               className="flex flex-col items-center gap-1.5 rounded-xl bg-muted p-3 text-xs font-medium"
             >
               <QrCode className="size-5 text-primary" />
-              {t("scan_pay")}
+              {t("wallet.scan_pay")}
             </Link>
           </div>
         </Card>
@@ -165,13 +172,13 @@ function Wallet() {
         {role === "staff" ? (
           <Card className="shadow-card border-primary/30 bg-accent p-4">
             <p className="text-sm font-semibold text-accent-foreground">
-              Tips arrive here instantly 🎉
+              {t("wallet.staff_banner_title")}
             </p>
             <p className="mt-1 text-xs text-accent-foreground/80">
-              Keep your profile and GPS location updated so guests can find and tip you.
+              {t("wallet.staff_banner_desc")}
             </p>
             <Button asChild size="sm" variant="secondary" className="mt-3">
-              <Link to="/profile">Update my staff profile</Link>
+              <Link to="/profile">{t("wallet.update_profile")}</Link>
             </Button>
           </Card>
         ) : null}
@@ -179,10 +186,8 @@ function Wallet() {
         <Link to="/receipts" className="block">
           <Card className="shadow-card flex items-center justify-between p-4">
             <div>
-              <p className="text-sm font-semibold">My receipts</p>
-              <p className="text-xs text-muted-foreground">
-                Download or share any payment receipt
-              </p>
+              <p className="text-sm font-semibold">{t("wallet.receipts")}</p>
+              <p className="text-xs text-muted-foreground">{t("wallet.receipts_desc")}</p>
             </div>
             <Receipt className="size-5 text-primary" />
           </Card>
@@ -190,12 +195,14 @@ function Wallet() {
 
         <div>
           <div className="mb-2 flex items-center justify-between px-1">
-            <h2 className="text-sm font-semibold">{t("transactions")}</h2>
+            <h2 className="text-sm font-semibold">{t("wallet.transactions")}</h2>
             <Badge variant="secondary">{txs.data?.length ?? 0}</Badge>
           </div>
           <Card className="shadow-card divide-y divide-border overflow-hidden p-0">
             {(txs.data ?? []).length === 0 ? (
-              <p className="p-6 text-center text-sm text-muted-foreground">{t("no_transactions")}</p>
+              <p className="p-6 text-center text-sm text-muted-foreground">
+                {t("wallet.no_transactions")}
+              </p>
             ) : (
               (txs.data ?? []).map((tx) => {
                 const meta = typeMeta[tx.type] ?? {
@@ -253,7 +260,7 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
     mutationFn: async () => {
       const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
       if (sessionErr || !sessionData.session?.access_token) {
-        throw new Error("Not signed in. Please log out and log back in.");
+        throw new Error(t("wallet.error_not_signed_in"));
       }
 
       const res = await fetch("/api/chapa/initiate", {
@@ -268,7 +275,7 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
       const json = await res.json().catch(() => ({}));
       const checkoutUrl = (json as { checkoutUrl?: string }).checkoutUrl;
       if (!res.ok || !checkoutUrl) {
-        throw new Error(errorText(json, `Deposit failed (${res.status})`));
+        throw new Error(errorText(json, t("wallet.error_deposit_failed")));
       }
       return checkoutUrl;
     },
@@ -283,19 +290,17 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button>
-          <ActionTile icon={ArrowDownLeft} label={t("deposit")} />
+          <ActionTile icon={ArrowDownLeft} label={t("wallet.deposit")} />
         </button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("deposit")}</DialogTitle>
-          <DialogDescription>
-            You'll pick Telebirr, your bank, or a card on the next screen and confirm the payment there.
-          </DialogDescription>
+          <DialogTitle>{t("wallet.deposit")}</DialogTitle>
+          <DialogDescription>{t("wallet.deposit_desc")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="damt">{t("amount")}</Label>
+            <Label htmlFor="damt">{t("wallet.amount")}</Label>
             <Input
               id="damt"
               inputMode="decimal"
@@ -309,7 +314,7 @@ function DepositDialog({ onDone }: { onDone: () => void }) {
             disabled={m.isPending || !amount}
             onClick={() => m.mutate()}
           >
-            {m.isPending ? "Redirecting..." : t("confirm")}
+            {m.isPending ? t("wallet.redirecting") : t("wallet.confirm")}
           </Button>
         </div>
       </DialogContent>
@@ -329,12 +334,12 @@ function SendDialog({ onDone }: { onDone: () => void }) {
       const { error } = await supabase.rpc("wallet_transfer", {
         _recipient: recipient.trim(),
         _amount: Number(amount),
-        _note: note || "Transfer",
+        _note: note || t("wallet.transfer_default"),
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success(`Sent ${formatETB(amount)} · SMS notification sent`);
+      toast.success(t("wallet.sent_success", { amount: formatETB(amount) }));
       setOpen(false);
       setAmount("");
       setRecipient("");
@@ -348,19 +353,17 @@ function SendDialog({ onDone }: { onDone: () => void }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button>
-          <ActionTile icon={Send} label={t("send")} />
+          <ActionTile icon={Send} label={t("wallet.send")} />
         </button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("send")}</DialogTitle>
-          <DialogDescription>
-            Send money to any Moybirr user by Moybirr ID or phone number.
-          </DialogDescription>
+          <DialogTitle>{t("wallet.send")}</DialogTitle>
+          <DialogDescription>{t("wallet.send_desc")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="srecipient">Moybirr ID or phone number</Label>
+            <Label htmlFor="srecipient">{t("wallet.recipient")}</Label>
             <Input
               id="srecipient"
               inputMode="text"
@@ -370,7 +373,7 @@ function SendDialog({ onDone }: { onDone: () => void }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="samt">{t("amount")}</Label>
+            <Label htmlFor="samt">{t("wallet.amount")}</Label>
             <Input
               id="samt"
               inputMode="decimal"
@@ -379,7 +382,7 @@ function SendDialog({ onDone }: { onDone: () => void }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="snote">Note</Label>
+            <Label htmlFor="snote">{t("wallet.note")}</Label>
             <Input id="snote" value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
           <Button
@@ -388,7 +391,7 @@ function SendDialog({ onDone }: { onDone: () => void }) {
             disabled={m.isPending || !amount || !recipient}
             onClick={() => m.mutate()}
           >
-            {t("confirm")}
+            {t("wallet.confirm")}
           </Button>
         </div>
       </DialogContent>
@@ -410,14 +413,14 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
     queryFn: async () => {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
-      if (!token) throw new Error("Not signed in");
+      if (!token) throw new Error(t("wallet.error_not_signed_in"));
       const res = await fetch("/api/chapa/banks", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json().catch(() => ({}));
       const banks = (json as { banks?: { code: string; name: string }[] }).banks;
       if (!res.ok || !banks) {
-        throw new Error(errorText(json, `Could not load banks (${res.status})`));
+        throw new Error(errorText(json, t("wallet.error_banks_failed")));
       }
       return banks;
     },
@@ -427,7 +430,7 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
     mutationFn: async () => {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
-      if (!token) throw new Error("Not signed in. Please log out and log back in.");
+      if (!token) throw new Error(t("wallet.error_not_signed_in"));
       const res = await fetch("/api/chapa/withdraw", {
         method: "POST",
         headers: {
@@ -442,10 +445,10 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
         }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errorText(json, `Withdrawal failed (${res.status})`));
+      if (!res.ok) throw new Error(errorText(json, t("wallet.error_withdraw_failed")));
     },
     onSuccess: () => {
-      toast.success("Withdrawal sent — it'll land in a few minutes");
+      toast.success(t("wallet.withdraw_success"));
       setOpen(false);
       setAmount("");
       setAccountNumber("");
@@ -461,19 +464,17 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button>
-          <ActionTile icon={ArrowUpRight} label={t("withdraw")} />
+          <ActionTile icon={ArrowUpRight} label={t("wallet.withdraw")} />
         </button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("withdraw")}</DialogTitle>
-          <DialogDescription>
-            Sent as a real bank transfer. Double-check the account details — we can't reverse a transfer sent to the wrong account.
-          </DialogDescription>
+          <DialogTitle>{t("wallet.withdraw")}</DialogTitle>
+          <DialogDescription>{t("wallet.withdraw_desc")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="wbank">Bank</Label>
+            <Label htmlFor="wbank">{t("wallet.bank")}</Label>
             <select
               id="wbank"
               className="w-full rounded-md border border-border bg-background p-2 text-sm"
@@ -481,7 +482,7 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
               onChange={(e) => setBankCode(e.target.value)}
             >
               <option value="">
-                {banksQuery.isLoading ? "Loading banks..." : "Select a bank"}
+                {banksQuery.isLoading ? t("wallet.loading_banks") : t("wallet.select_bank")}
               </option>
               {banksQuery.data?.map((b) => (
                 <option key={b.code} value={b.code}>
@@ -496,7 +497,7 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
             ) : null}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wacct">Account number</Label>
+            <Label htmlFor="wacct">{t("wallet.account_number")}</Label>
             <Input
               id="wacct"
               value={accountNumber}
@@ -504,7 +505,7 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wname">Account holder name</Label>
+            <Label htmlFor="wname">{t("wallet.account_name")}</Label>
             <Input
               id="wname"
               value={accountName}
@@ -512,7 +513,7 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wamt">{t("amount")}</Label>
+            <Label htmlFor="wamt">{t("wallet.amount")}</Label>
             <Input
               id="wamt"
               inputMode="decimal"
@@ -526,7 +527,7 @@ function WithdrawDialog({ onDone }: { onDone: () => void }) {
             disabled={m.isPending || !canSubmit}
             onClick={() => m.mutate()}
           >
-            {m.isPending ? "Sending..." : t("confirm")}
+            {m.isPending ? t("wallet.sending") : t("wallet.confirm")}
           </Button>
         </div>
       </DialogContent>
