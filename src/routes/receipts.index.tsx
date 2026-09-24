@@ -47,19 +47,20 @@ function ReceiptsPage() {
 
   return (
     <>
-      <AppHeader title="My Receipts" subtitle="Every payment, tip, and booking" />
+      <AppHeader
+        title={t("receipts.title")}
+        subtitle={t("receipts.subtitle")}
+      />
 
       <div className="-mt-6 space-y-3 px-4 pb-6">
         {receipts.isLoading ? (
           <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-            Loading receipts…
+            {t("receipts.loading")}
           </Card>
         ) : (receipts.data ?? []).length === 0 ? (
           <Card className="shadow-card flex flex-col items-center gap-2 p-6 text-center">
             <Receipt className="size-7 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              No receipts yet. Once you make a payment or receive a tip, it appears here.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("receipts.empty")}</p>
           </Card>
         ) : (
           (receipts.data ?? []).map((r) => {
@@ -69,6 +70,9 @@ function ReceiptsPage() {
               type?: string;
             } | null;
             const isRecipient = r.role_on_receipt === "recipient";
+            const typeLabel = tx?.type
+              ? t(`tx.${tx.type}`) || tx.type
+              : t("receipts.payment");
             return (
               <Link
                 key={r.id}
@@ -91,7 +95,7 @@ function ReceiptsPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{r.receipt_no}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {tx?.type ?? "payment"} · {new Date(r.created_at).toLocaleString()}
+                      {typeLabel} · {new Date(r.created_at).toLocaleString()}
                     </p>
                   </div>
                   <p
