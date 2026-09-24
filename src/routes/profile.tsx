@@ -102,7 +102,7 @@ function ProfilePage() {
     mutationFn: async () => {
       const trimmedEmail = email.trim();
       if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-        throw new Error("Enter a valid email address");
+        throw new Error(t("profile.error_invalid_email"));
       }
       const { error } = await supabase
         .from("profiles")
@@ -116,7 +116,7 @@ function ProfilePage() {
       if (error) throw error;
     },
     onSuccess: async () => {
-      toast.success("Profile updated");
+      toast.success(t("profile.profile_updated"));
       await refresh();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -129,7 +129,7 @@ function ProfilePage() {
       return data;
     },
     onSuccess: (refund) => {
-      toast.success(`Booking cancelled — ${formatETB(refund as number)} refunded`);
+      toast.success(t("profile.booking_cancelled", { amount: formatETB(refund as number) }));
       void qc.invalidateQueries({ queryKey: ["bookings"] });
       void qc.invalidateQueries({ queryKey: ["wallet"] });
     },
@@ -145,7 +145,7 @@ function ProfilePage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Request sent — your hotel owner needs to approve it");
+      toast.success(t("profile.join_request_sent"));
       setHotelCode("");
       void qc.invalidateQueries({ queryKey: ["my-staff-profile"] });
     },
@@ -187,7 +187,7 @@ function ProfilePage() {
       if (addrErr) throw addrErr;
     },
     onSuccess: () => {
-      toast.success("Staff profile updated");
+      toast.success(t("profile.staff_profile_updated"));
       void qc.invalidateQueries({ queryKey: ["my-staff-profile"] });
       void qc.invalidateQueries({ queryKey: ["my-staff-address"] });
       void qc.invalidateQueries({ queryKey: ["staff-directory"] });
@@ -211,7 +211,7 @@ function ProfilePage() {
         title={t("profile")}
         subtitle={
           role === "staff" && employment !== "active"
-            ? "Pending hotel approval"
+            ? t("profile.pending_approval")
             : profile?.moybirr_id
               ? profile.moybirr_id + (profile?.phone ? " · " + profile.phone : "")
               : (profile?.phone ?? "")
@@ -239,8 +239,10 @@ function ProfilePage() {
 
           <div className="space-y-1.5">
             <Label htmlFor="pemail">
-              Email{" "}
-              <span className="font-normal text-muted-foreground">(for receipts)</span>
+              {t("profile.email")}{" "}
+              <span className="font-normal text-muted-foreground">
+                ({t("profile.email_note")})
+              </span>
             </Label>
             <Input
               id="pemail"
@@ -251,23 +253,23 @@ function ProfilePage() {
               onChange={(e) => setEmail(e.target.value)}
             />
             <p className="text-[11px] text-muted-foreground">
-              Used only for payment receipts. Never shared publicly.
+              {t("profile.email_privacy")}
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label>Profile photo</Label>
+            <Label>{t("profile.profile_photo")}</Label>
             {photo ? (
               <MediaImg
                 src={photo}
-                alt="Profile photo"
+                alt={t("profile.profile_photo")}
                 className="size-20 rounded-full object-cover"
               />
             ) : null}
             {user ? (
               <UploadButton
                 userId={user.id}
-                label="Upload profile photo"
+                label={t("profile.upload_photo")}
                 onUploaded={setPhoto}
               />
             ) : null}
@@ -287,7 +289,7 @@ function ProfilePage() {
                     lang === l.code ? "bg-primary text-primary-foreground" : "bg-card"
                   }`}
                 >
-                  {l.label}
+                  {l.flag} {l.label}
                 </button>
               ))}
             </div>
@@ -298,14 +300,14 @@ function ProfilePage() {
             disabled={saveProfile.isPending}
             onClick={() => saveProfile.mutate()}
           >
-            Save profile
+            {t("profile.save_profile")}
           </Button>
         </Card>
 
         {role === "staff" ? (
           <Card className="shadow-card space-y-3 p-5">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold">My staff profile</p>
+              <p className="text-sm font-semibold">{t("profile.my_staff_profile")}</p>
               <span className="flex items-center gap-1 text-sm font-bold">
                 <Star className="size-4 fill-primary text-primary" />
                 {Number(staffProfile.data?.rating ?? 0).toFixed(1)}
@@ -315,12 +317,12 @@ function ProfilePage() {
             <div className="rounded-xl bg-muted/60 p-3">
               {employment === "active" ? (
                 <>
-                  <p className="text-xs text-muted-foreground">You work at</p>
+                  <p className="text-xs text-muted-foreground">{t("profile.you_work_at")}</p>
                   <p className="text-sm font-semibold">
-                    {staffProfile.data?.workplace_hotel_name ?? "Your hotel"}
+                    {staffProfile.data?.workplace_hotel_name ?? t("profile.your_hotel")}
                   </p>
                   <Badge variant="secondary" className="mt-2">
-                    Approved · you can receive tips
+                    {t("profile.approved_tips")}
                   </Badge>
                   {profile?.moybirr_id ? (
                     <p className="mt-2 flex items-center gap-1 font-mono text-xs text-muted-foreground">
@@ -331,20 +333,20 @@ function ProfilePage() {
                 </>
               ) : employment === "pending" ? (
                 <>
-                  <p className="text-sm font-semibold">Waiting for approval</p>
+                  <p className="text-sm font-semibold">{t("profile.waiting_approval")}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    You asked to join{" "}
-                    {staffProfile.data?.workplace_hotel_name ?? "a hotel"}. Your owner has to
-                    approve you before you can receive tips.
+                    {t("profile.pending_hint", {
+                      hotel: staffProfile.data?.workplace_hotel_name ?? t("profile.a_hotel"),
+                    })}
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="text-sm font-semibold">Link your workplace</p>
+                  <p className="text-sm font-semibold">{t("profile.link_workplace")}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {employment === "rejected"
-                      ? "Your last request was rejected. Check the Hotel ID with your manager and try again."
-                      : "Ask your manager for the hotel's Moybirr ID, then enter it here."}
+                      ? t("profile.rejected_hint")
+                      : t("profile.link_hint")}
                   </p>
                   <div className="mt-2 flex gap-2">
                     <Input
@@ -357,7 +359,7 @@ function ProfilePage() {
                       disabled={!hotelCode.trim() || joinHotel.isPending}
                       onClick={() => joinHotel.mutate(hotelCode)}
                     >
-                      Join
+                      {t("profile.join")}
                     </Button>
                   </div>
                 </>
@@ -365,22 +367,22 @@ function ProfilePage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="pos">Position</Label>
+              <Label htmlFor="pos">{t("profile.position")}</Label>
               <Input
                 id="pos"
-                placeholder={staffProfile.data?.position ?? "waiter"}
+                placeholder={staffProfile.data?.position ?? t("profile.position_placeholder")}
                 value={position}
                 onChange={(e) => setPosition(e.target.value)}
               />
             </div>
 
             <p className="pt-1 text-xs font-medium text-muted-foreground">
-              Current working place
+              {t("profile.current_workplace")}
             </p>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="region">Region</Label>
+                <Label htmlFor="region">{t("profile.region")}</Label>
                 <Input
                   id="region"
                   placeholder={staffProfile.data?.region ?? "Addis Ababa"}
@@ -389,7 +391,7 @@ function ProfilePage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="city">City</Label>
+                <Label htmlFor="city">{t("profile.city")}</Label>
                 <Input
                   id="city"
                   placeholder={staffProfile.data?.city ?? "Addis Ababa"}
@@ -398,7 +400,7 @@ function ProfilePage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="subcity">Subcity</Label>
+                <Label htmlFor="subcity">{t("profile.subcity")}</Label>
                 <Input
                   id="subcity"
                   placeholder={staffProfile.data?.subcity ?? "Bole"}
@@ -407,7 +409,7 @@ function ProfilePage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="wereda">Wereda</Label>
+                <Label htmlFor="wereda">{t("profile.wereda")}</Label>
                 <Input
                   id="wereda"
                   placeholder={staffAddress.data?.wereda ?? "03"}
@@ -416,10 +418,12 @@ function ProfilePage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="house">House number</Label>
+                <Label htmlFor="house">{t("profile.house_number")}</Label>
                 <Input
                   id="house"
-                  placeholder={staffAddress.data?.house_number ?? "Optional"}
+                  placeholder={
+                    staffAddress.data?.house_number ?? t("profile.optional_label")
+                  }
                   value={houseNumber}
                   onChange={(e) => setHouseNumber(e.target.value)}
                 />
@@ -427,8 +431,7 @@ function ProfilePage() {
             </div>
 
             <p className="text-[11px] text-muted-foreground">
-              Your wereda and house number are private. Guests and hotel owners never see them —
-              only you and Moybirr support.
+              {t("profile.privacy_note")}
             </p>
 
             <Button
@@ -447,7 +450,7 @@ function ProfilePage() {
                 });
               }}
             >
-              Save working place
+              {t("profile.save_workplace")}
             </Button>
 
             <Button
@@ -467,12 +470,12 @@ function ProfilePage() {
                       wereda: wereda || staffAddress.data?.wereda || "",
                       house_number: houseNumber || staffAddress.data?.house_number || "",
                     }),
-                  () => toast.error("Could not read your GPS location"),
+                  () => toast.error(t("profile.error_gps")),
                 );
               }}
             >
               <Navigation className="mr-2 size-4" />
-              Save + update with my GPS location
+              {t("profile.save_with_gps")}
             </Button>
 
             {staffProfile.data?.lat && employment === "active" ? (
@@ -480,7 +483,7 @@ function ProfilePage() {
                 <MapPin className="mr-1 inline size-3" />
                 {Number(staffProfile.data.lat).toFixed(3)},{" "}
                 {Number(staffProfile.data.lng).toFixed(3)} · {staffProfile.data.rating_count}{" "}
-                ratings
+                {t("profile.ratings")}
               </p>
             ) : null}
           </Card>
@@ -492,15 +495,15 @@ function ProfilePage() {
         staffProfile.data?.hotel_id ? (
           <Card className="shadow-card space-y-3 p-5">
             <div>
-              <p className="text-sm font-semibold">My workplace</p>
+              <p className="text-sm font-semibold">{t("profile.my_workplace")}</p>
               <p className="text-xs text-muted-foreground">
-                Talk to your team, send shift reports to your manager, and join meetings.
+                {t("profile.workplace_desc")}
               </p>
             </div>
             <Tabs defaultValue="chat">
               <TabsList className="w-full justify-start">
-                <TabsTrigger value="chat">Team chat</TabsTrigger>
-                <TabsTrigger value="meetings">Meetings</TabsTrigger>
+                <TabsTrigger value="chat">{t("owner_dashboard.tab_team")}</TabsTrigger>
+                <TabsTrigger value="meetings">{t("owner_dashboard.tab_meetings")}</TabsTrigger>
               </TabsList>
               <TabsContent value="chat" className="mt-3">
                 <TeamChat hotelId={staffProfile.data.hotel_id} />
@@ -517,7 +520,7 @@ function ProfilePage() {
           <div className="space-y-3">
             {(bookings.data ?? []).length === 0 ? (
               <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-                No bookings yet.
+                {t("profile.no_bookings")}
               </Card>
             ) : (
               (bookings.data ?? []).map((b) => {
@@ -532,7 +535,7 @@ function ProfilePage() {
                         </p>
                       </div>
                       <Badge variant={b.status === "cancelled" ? "destructive" : "secondary"}>
-                        {b.status}
+                        {t(`status.${b.status}`) || b.status}
                       </Badge>
                     </div>
                     <p className="text-sm font-semibold">{formatETB(b.total)}</p>
@@ -551,7 +554,7 @@ function ProfilePage() {
                         size="sm"
                         onClick={() => setRating({ bookingId: b.id, hotelId: b.hotel_id })}
                       >
-                        {t("rate_staff")}
+                        {t("staff_actions.rate_hotel")}
                       </Button>
                     </div>
                   </Card>
@@ -563,7 +566,7 @@ function ProfilePage() {
 
         <Button variant="outline" className="w-full" onClick={() => void signOut()}>
           <LogOut className="mr-2 size-4" />
-          {t("logout")}
+          {t("auth.logout")}
         </Button>
       </div>
 
@@ -621,7 +624,7 @@ function RatingDialog({
       }
     },
     onSuccess: () => {
-      toast.success("Thank you! Your ratings are now visible to every guest.");
+      toast.success(t("rating.success"));
       void qc.invalidateQueries({ queryKey: ["hotel-ratings-all"] });
       void qc.invalidateQueries({ queryKey: ["staff-directory"] });
       onClose();
@@ -633,27 +636,25 @@ function RatingDialog({
     <Dialog open={!!data} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{t("rate_hotel")}</DialogTitle>
-          <DialogDescription>
-            Rate the hospitality from 1 to 5 stars. Every guest can see these ratings.
-          </DialogDescription>
+          <DialogTitle>{t("staff_actions.rate_hotel")}</DialogTitle>
+          <DialogDescription>{t("rating.desc")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
           <Stars value={hotelStars} onChange={setHotelStars} />
 
           <div className="space-y-2">
-            <Label>{t("rate_staff")}</Label>
+            <Label>{t("staff_actions.rate_staff")}</Label>
             {(staff.data ?? []).length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No staff registered for this hotel yet.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("rating.no_staff")}</p>
             ) : (
               (staff.data ?? []).map((s) => {
                 const p = s.profiles as { full_name?: string } | null;
                 return (
                   <div key={s.id} className="rounded-xl border border-border p-3">
-                    <p className="text-sm font-medium">{p?.full_name || "Staff member"}</p>
+                    <p className="text-sm font-medium">
+                      {p?.full_name || t("staff_member")}
+                    </p>
                     <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
                     <Stars
                       value={staffStars[s.id] ?? 0}
@@ -666,12 +667,12 @@ function RatingDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="cmt">Comment</Label>
+            <Label htmlFor="cmt">{t("rating.comment")}</Label>
             <Textarea id="cmt" value={comment} onChange={(e) => setComment(e.target.value)} />
           </div>
 
           <Button className="w-full" disabled={submit.isPending} onClick={() => submit.mutate()}>
-            {t("confirm")}
+            {t("wallet.confirm")}
           </Button>
         </div>
       </DialogContent>
