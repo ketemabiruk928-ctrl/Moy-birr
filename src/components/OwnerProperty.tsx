@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Trash2, Image as ImageIcon, Video, BedDouble, Search } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, Video, BedDouble } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { formatETB } from "@/lib/i18n";
+import { formatETB, useLang } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,19 +29,20 @@ type Hotel = {
 };
 
 const VENUE_TYPES = [
-  { value: "hotel", label: "Hotel" },
-  { value: "guesthouse", label: "Guesthouse" },
-  { value: "resort", label: "Resort" },
-  { value: "lodge", label: "Lodge" },
-  { value: "restaurant", label: "Restaurant" },
-  { value: "cafe", label: "Cafe" },
-  { value: "bar", label: "Bar" },
-  { value: "lounge", label: "Lounge" },
+  { value: "hotel", labelKey: "venue.hotel" },
+  { value: "guesthouse", labelKey: "venue.guesthouse" },
+  { value: "resort", labelKey: "venue.resort" },
+  { value: "lodge", labelKey: "venue.lodge" },
+  { value: "restaurant", labelKey: "venue.restaurant" },
+  { value: "cafe", labelKey: "venue.cafe" },
+  { value: "bar", labelKey: "venue.bar" },
+  { value: "lounge", labelKey: "venue.lounge" },
 ];
 
 const ROOMLESS = new Set(["restaurant", "cafe", "bar", "lounge"]);
 
 export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
+  const { t } = useLang();
   const qc = useQueryClient();
   const { user } = useAuth();
 
@@ -92,7 +93,7 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success(hotel ? "Property updated" : "Property registered");
+      toast.success(hotel ? t("property.updated") : t("property.registered"));
       void qc.invalidateQueries({ queryKey: ["my-hotel"] });
       void qc.invalidateQueries({ queryKey: ["hotels"] });
     },
@@ -102,21 +103,21 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
   return (
     <Card className="shadow-card space-y-3 p-4">
       <p className="text-sm font-semibold">
-        {hotel ? "Property details" : "Register your property"}
+        {hotel ? t("property.details") : t("property.register")}
       </p>
 
       <div className="space-y-1.5">
-        <Label htmlFor="hn">Name</Label>
+        <Label htmlFor="hn">{t("property.name")}</Label>
         <Input
           id="hn"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Sheba Grand Hotel"
+          placeholder={t("property.name_placeholder")}
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="hv">Venue type</Label>
+        <Label htmlFor="hv">{t("property.venue_type")}</Label>
         <select
           id="hv"
           value={venueType}
@@ -125,20 +126,22 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
         >
           {VENUE_TYPES.map((v) => (
             <option key={v.value} value={v.value}>
-              {v.label}
+              {t(v.labelKey)}
             </option>
           ))}
         </select>
         {isRoomless ? (
           <p className="text-[11px] text-muted-foreground">
-            {VENUE_TYPES.find((v) => v.value === venueType)?.label}s take no room bookings.
+            {t("property.roomless_note", {
+              type: t(VENUE_TYPES.find((v) => v.value === venueType)?.labelKey ?? ""),
+            })}
           </p>
         ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="hc">City</Label>
+          <Label htmlFor="hc">{t("property.city")}</Label>
           <Input
             id="hc"
             value={city}
@@ -147,7 +150,7 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="hs">Subcity</Label>
+          <Label htmlFor="hs">{t("property.subcity")}</Label>
           <Input
             id="hs"
             value={subcity}
@@ -158,17 +161,17 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="hl">Location / address</Label>
+        <Label htmlFor="hl">{t("property.location")}</Label>
         <Input
           id="hl"
           value={locationText}
           onChange={(e) => setLocationText(e.target.value)}
-          placeholder="Near Bole Airport, main road"
+          placeholder={t("property.location_placeholder")}
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="hp">From price (ETB)</Label>
+        <Label htmlFor="hp">{t("property.from_price")}</Label>
         <Input
           id="hp"
           type="number"
@@ -181,8 +184,10 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
       {!isRoomless ? (
         <div className="space-y-1.5">
           <Label htmlFor="beds">
-            Total beds{" "}
-            <span className="font-normal text-muted-foreground">(optional)</span>
+            {t("property.total_beds")}{" "}
+            <span className="font-normal text-muted-foreground">
+              ({t("property.optional")})
+            </span>
           </Label>
           <Input
             id="beds"
@@ -196,39 +201,43 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
       ) : null}
 
       <div className="space-y-1.5">
-        <Label htmlFor="hi">Cover photo</Label>
+        <Label htmlFor="hi">{t("property.cover_photo")}</Label>
         {photoUrl ? (
           <MediaImg
             src={photoUrl}
-            alt="Cover photo"
+            alt={t("property.cover_photo")}
             className="h-36 w-full rounded-xl object-cover"
           />
         ) : null}
         {user ? (
-          <UploadButton userId={user.id} label="Upload cover photo" onUploaded={setPhotoUrl} />
+          <UploadButton
+            userId={user.id}
+            label={t("property.upload_cover")}
+            onUploaded={setPhotoUrl}
+          />
         ) : null}
         <Input
           id="hi"
           value={photoUrl}
           onChange={(e) => setPhotoUrl(e.target.value)}
-          placeholder="…or paste an image URL"
+          placeholder={t("property.url_placeholder")}
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="hd">Description</Label>
+        <Label htmlFor="hd">{t("property.description")}</Label>
         <Textarea
           id="hd"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Rooftop restaurant, spa, free airport shuttle…"
+          placeholder={t("property.description_placeholder")}
         />
       </div>
 
       <div className="space-y-1.5">
         <Label htmlFor="tl">
-          Trade licence{" "}
-          <span className="font-normal text-muted-foreground">(optional)</span>
+          {t("property.trade_license")}{" "}
+          <span className="font-normal text-muted-foreground">({t("property.optional")})</span>
         </Label>
         {tradeLicenseUrl ? (
           <a
@@ -237,14 +246,14 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
             rel="noreferrer"
             className="block truncate text-xs text-primary underline"
           >
-            View current licence
+            {t("property.view_license")}
           </a>
         ) : null}
         {user ? (
           <UploadButton
             userId={user.id}
             accept="image/*,application/pdf"
-            label="Upload trade licence"
+            label={t("property.upload_license")}
             onUploaded={setTradeLicenseUrl}
           />
         ) : null}
@@ -252,7 +261,7 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
           id="tl"
           value={tradeLicenseUrl}
           onChange={(e) => setTradeLicenseUrl(e.target.value)}
-          placeholder="…or paste a document / image URL"
+          placeholder={t("property.doc_url_placeholder")}
         />
       </div>
 
@@ -261,13 +270,14 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
         disabled={!name || save.isPending}
         onClick={() => save.mutate()}
       >
-        {hotel ? "Save changes" : "Register property"}
+        {hotel ? t("property.save_changes") : t("property.register")}
       </Button>
     </Card>
   );
 }
 
 export function RoomsManager({ hotelId }: { hotelId: string }) {
+  const { t } = useLang();
   const qc = useQueryClient();
   const [roomType, setRoomType] = useState("");
   const [price, setPrice] = useState("");
@@ -299,7 +309,7 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Room added");
+      toast.success(t("rooms.room_added"));
       setRoomType("");
       setPrice("");
       setCapacity("2");
@@ -316,7 +326,7 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Room removed");
+      toast.success(t("rooms.room_removed"));
       void qc.invalidateQueries({ queryKey: ["owner-rooms", hotelId] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -329,20 +339,20 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
       <Card className="shadow-card space-y-3 p-4">
         <p className="flex items-center gap-1.5 text-sm font-semibold">
           <BedDouble className="size-4 text-primary" />
-          Add room &amp; price
+          {t("rooms.add_room")}
         </p>
         <div className="space-y-1.5">
-          <Label htmlFor="rt">Room type</Label>
+          <Label htmlFor="rt">{t("rooms.room_type")}</Label>
           <Input
             id="rt"
             value={roomType}
             onChange={(e) => setRoomType(e.target.value)}
-            placeholder="Deluxe double"
+            placeholder={t("rooms.room_type_placeholder")}
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="rp">Price / night (ETB)</Label>
+            <Label htmlFor="rp">{t("rooms.price_per_night")}</Label>
             <Input
               id="rp"
               type="number"
@@ -352,7 +362,7 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="rc">Capacity (guests)</Label>
+            <Label htmlFor="rc">{t("rooms.capacity")}</Label>
             <Input
               id="rc"
               type="number"
@@ -363,12 +373,12 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="cs">Class Stage (optional)</Label>
+          <Label htmlFor="cs">{t("rooms.class_stage")}</Label>
           <Input
             id="cs"
             value={classStage}
             onChange={(e) => setClassStage(e.target.value)}
-            placeholder="e.g. Standard, VIP, Executive"
+            placeholder={t("rooms.class_stage_placeholder")}
           />
         </div>
         <Button
@@ -377,24 +387,29 @@ export function RoomsManager({ hotelId }: { hotelId: string }) {
           onClick={() => add.mutate()}
         >
           <Plus className="mr-2 size-4" />
-          Add room
+          {t("rooms.add_room_btn")}
         </Button>
       </Card>
 
       {(rooms.data ?? []).length === 0 ? (
         <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-          No rooms listed yet. Add your room types and prices so guests can book.
+          {t("rooms.no_rooms")}
         </Card>
       ) : (
         <>
           <p className="px-1 text-xs text-muted-foreground">
-            {(rooms.data ?? []).length} room types · total capacity {totalCapacity} guests
+            {t("rooms.summary", {
+              count: (rooms.data ?? []).length,
+              capacity: totalCapacity,
+            })}
           </p>
           {(rooms.data ?? []).map((r) => (
             <Card key={r.id} className="shadow-card flex items-center justify-between p-4">
               <div>
                 <p className="text-sm font-semibold">{r.room_type}</p>
-                <p className="text-xs text-muted-foreground">Up to {r.capacity} guests</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("rooms.up_to_guests", { count: r.capacity })}
+                </p>
                 {r.class_stage ? (
                   <Badge variant="outline" className="mt-1 text-[10px]">
                     {r.class_stage}
@@ -427,6 +442,7 @@ export function ShowcaseManager({
   hotelId: string;
   premiumActive?: boolean;
 }) {
+  const { t } = useLang();
   const qc = useQueryClient();
   const { user } = useAuth();
   const [kind, setKind] = useState<"photo" | "video">("photo");
@@ -450,26 +466,23 @@ export function ShowcaseManager({
   const add = useMutation({
     mutationFn: async () => {
       if (!premiumActive) {
-        throw new Error("Monthly subscription required to post photos and videos");
+        throw new Error(t("showcase.subscription_required"));
       }
 
-      // Determine which column to save to
       const insertData = {
         hotel_id: hotelId,
         kind: kind,
         caption: caption,
         moderation_status: "pending",
-        url: kind === "photo" ? url : null,          // Save photo to 'url'
-        video_url: kind === "video" ? url : null,    // Save video to 'video_url'
+        url: kind === "photo" ? url : null,
+        video_url: kind === "video" ? url : null,
       };
 
-      const { error } = await supabase
-        .from("hotel_media")
-        .insert(insertData);
+      const { error } = await supabase.from("hotel_media").insert(insertData);
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Uploaded. Waiting for Moybirr approval before it is public.");
+      toast.success(t("showcase.uploaded"));
       setUrl("");
       setCaption("");
       void qc.invalidateQueries({ queryKey: ["hotel-media", hotelId] });
@@ -491,18 +504,14 @@ export function ShowcaseManager({
   return (
     <div className="space-y-3">
       <Card className="shadow-card space-y-3 p-4">
-        <p className="text-sm font-semibold">Advertise your best service</p>
-        <p className="text-xs text-muted-foreground">
-          Add photos and videos of your rooms, restaurant and spa. Guests see them on your hotel
-          page while your monthly plan is active.
-        </p>
+        <p className="text-sm font-semibold">{t("showcase.title")}</p>
+        <p className="text-xs text-muted-foreground">{t("showcase.desc")}</p>
 
         {!premiumActive ? (
           <div className="rounded-xl border border-dashed border-border bg-muted/50 p-4 text-center">
-            <p className="text-sm font-medium">Subscription required</p>
+            <p className="text-sm font-medium">{t("showcase.subscription_required")}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Pay the monthly listing plan (500 ETB) to post photos and videos that promote your
-              hotel.
+              {t("showcase.subscription_desc")}
             </p>
           </div>
         ) : (
@@ -515,7 +524,7 @@ export function ShowcaseManager({
                 onClick={() => setKind("photo")}
               >
                 <ImageIcon className="mr-2 size-4" />
-                Photo
+                {t("showcase.photo")}
               </Button>
               <Button
                 size="sm"
@@ -524,16 +533,20 @@ export function ShowcaseManager({
                 onClick={() => setKind("video")}
               >
                 <Video className="mr-2 size-4" />
-                Video
+                {t("showcase.video")}
               </Button>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="mu">{kind === "photo" ? "Photo" : "Video (mp4)"}</Label>
+              <Label htmlFor="mu">
+                {kind === "photo" ? t("showcase.photo") : t("showcase.video")}
+              </Label>
               {user ? (
                 <UploadButton
                   userId={user.id}
                   accept={kind === "photo" ? "image/*" : "video/*"}
-                  label={kind === "photo" ? "Upload photo" : "Upload video"}
+                  label={
+                    kind === "photo" ? t("showcase.upload_photo") : t("showcase.upload_video")
+                  }
                   onUploaded={setUrl}
                 />
               ) : null}
@@ -541,16 +554,16 @@ export function ShowcaseManager({
                 id="mu"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="…or paste a URL"
+                placeholder={t("property.url_placeholder")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="mc">Caption</Label>
+              <Label htmlFor="mc">{t("showcase.caption")}</Label>
               <Input
                 id="mc"
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
-                placeholder="Rooftop restaurant with city view"
+                placeholder={t("showcase.caption_placeholder")}
               />
             </div>
             <Button
@@ -559,7 +572,7 @@ export function ShowcaseManager({
               onClick={() => add.mutate()}
             >
               <Plus className="mr-2 size-4" />
-              Add to showcase
+              {t("showcase.add_showcase")}
             </Button>
           </>
         )}
@@ -567,24 +580,27 @@ export function ShowcaseManager({
 
       {(media.data ?? []).length === 0 ? (
         <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-          Nothing in your showcase yet.
+          {t("showcase.nothing_yet")}
         </Card>
       ) : (
         (media.data ?? []).map((m) => (
           <Card key={m.id} className="shadow-card overflow-hidden p-0">
             {m.kind === "video" ? (
-              <MediaVideo src={m.video_url || m.url} className="h-44 w-full bg-muted object-cover" />
+              <MediaVideo
+                src={m.video_url || m.url}
+                className="h-44 w-full bg-muted object-cover"
+              />
             ) : (
               <MediaImg
                 src={m.url}
-                alt={m.caption ?? "Hotel service"}
+                alt={m.caption ?? t("showcase.photo")}
                 className="h-44 w-full object-cover"
               />
             )}
             <div className="flex items-center justify-between gap-2 p-3">
               <div>
                 <Badge variant="secondary" className="capitalize">
-                  {m.kind}
+                  {m.kind === "photo" ? t("showcase.photo") : t("showcase.video")}
                 </Badge>
                 <p className="mt-1 text-xs text-muted-foreground">{m.caption}</p>
                 <Badge
@@ -597,7 +613,7 @@ export function ShowcaseManager({
                   }
                   className="mt-1 capitalize"
                 >
-                  {m.moderation_status || "pending"}
+                  {t(`status.${m.moderation_status || "pending"}`) || m.moderation_status}
                 </Badge>
               </div>
               <Button
@@ -617,6 +633,7 @@ export function ShowcaseManager({
 }
 
 export function GuestRoomSearch({ hotelId }: { hotelId: string }) {
+  const { t } = useLang();
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [filterRoomType, setFilterRoomType] = useState("");
@@ -625,10 +642,7 @@ export function GuestRoomSearch({ hotelId }: { hotelId: string }) {
   const rooms = useQuery({
     queryKey: ["guest-rooms", hotelId, minPrice, maxPrice, filterRoomType, filterClass],
     queryFn: async () => {
-      let query = supabase
-        .from("rooms")
-        .select("*")
-        .eq("hotel_id", hotelId);
+      let query = supabase.from("rooms").select("*").eq("hotel_id", hotelId);
 
       if (minPrice) query = query.gte("price", Number(minPrice));
       if (maxPrice) query = query.lte("price", Number(maxPrice));
@@ -644,55 +658,61 @@ export function GuestRoomSearch({ hotelId }: { hotelId: string }) {
   return (
     <div className="space-y-4">
       <Card className="shadow-card space-y-3 p-4">
-        <p className="text-sm font-semibold">Find your room</p>
+        <p className="text-sm font-semibold">{t("rooms.room_filter_title")}</p>
         <div className="grid grid-cols-2 gap-2">
           <Input
-            placeholder="Min Price (ETB)"
+            placeholder={t("rooms.min_price")}
             type="number"
             value={minPrice}
             onChange={(e) => setMinPrice(e.target.value)}
           />
           <Input
-            placeholder="Max Price (ETB)"
+            placeholder={t("rooms.max_price")}
             type="number"
             value={maxPrice}
             onChange={(e) => setMaxPrice(e.target.value)}
           />
           <Input
-            placeholder="Room Type (e.g. Deluxe)"
+            placeholder={t("rooms.filter_room_type")}
             value={filterRoomType}
             onChange={(e) => setFilterRoomType(e.target.value)}
           />
           <Input
-            placeholder="Class (e.g. VIP)"
+            placeholder={t("rooms.filter_class")}
             value={filterClass}
             onChange={(e) => setFilterClass(e.target.value)}
           />
         </div>
-        <Button className="w-full" variant="outline" onClick={() => {
-          setMinPrice("");
-          setMaxPrice("");
-          setFilterRoomType("");
-          setFilterClass("");
-        }}>
-          Clear Filters
+        <Button
+          className="w-full"
+          variant="outline"
+          onClick={() => {
+            setMinPrice("");
+            setMaxPrice("");
+            setFilterRoomType("");
+            setFilterClass("");
+          }}
+        >
+          {t("rooms.clear_filters")}
         </Button>
       </Card>
 
       {rooms.isLoading ? (
         <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-          Searching rooms...
+          {t("rooms.searching")}
         </Card>
       ) : (rooms.data ?? []).length === 0 ? (
         <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-          No rooms match your criteria. Try adjusting your filters.
+          {t("rooms.no_match")}
         </Card>
       ) : (
         (rooms.data ?? []).map((r) => (
           <Card key={r.id} className="shadow-card flex items-center justify-between p-4">
             <div>
               <p className="text-sm font-semibold">{r.room_type}</p>
-              <p className="text-xs text-muted-foreground">Up to {r.capacity} guests</p>
+              <p className="text-xs text-muted-foreground">
+                {t("rooms.up_to_guests", { count: r.capacity })}
+              </p>
               {r.class_stage ? (
                 <Badge variant="outline" className="mt-1 text-[10px]">
                   {r.class_stage}
@@ -701,7 +721,7 @@ export function GuestRoomSearch({ hotelId }: { hotelId: string }) {
             </div>
             <div className="text-right">
               <p className="text-sm font-bold">{formatETB(r.price)}</p>
-              <p className="text-[10px] text-muted-foreground">per night</p>
+              <p className="text-[10px] text-muted-foreground">{t("rooms.per_night")}</p>
             </div>
           </Card>
         ))
