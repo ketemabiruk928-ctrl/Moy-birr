@@ -58,14 +58,21 @@ function StaffPage() {
 
   const list = (staff.data ?? [])
     .filter(
-      (s) => s.city.toLowerCase().includes(city.toLowerCase()) && Number(s.rating) >= minRating,
+      (s) =>
+        s.city.toLowerCase().includes(city.toLowerCase()) &&
+        Number(s.rating) >= minRating,
     )
     .map((s) => ({
       ...s,
-      dist: me && s.lat != null && s.lng != null ? distanceKm(me, { lat: s.lat, lng: s.lng }) : null,
+      dist:
+        me && s.lat != null && s.lng != null
+          ? distanceKm(me, { lat: s.lat, lng: s.lng })
+          : null,
     }))
     .sort((a, b) =>
-      me && nearFirst ? (a.dist ?? 1e9) - (b.dist ?? 1e9) : Number(b.rating) - Number(a.rating),
+      me && nearFirst
+        ? (a.dist ?? 1e9) - (b.dist ?? 1e9)
+        : Number(b.rating) - Number(a.rating),
     );
 
   return (
@@ -170,7 +177,7 @@ function StaffPage() {
                     {Number(s.rating).toFixed(1)}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
-                    {s.rating_count} {t("profile.ratings")}
+                    {s.rating_count} {t("profile_page.ratings")}
                   </p>
                 </div>
               </Card>
