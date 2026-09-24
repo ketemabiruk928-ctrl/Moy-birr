@@ -277,7 +277,8 @@
     "subtitle": "Offres de propriétaires d'hôtels vérifiés",
     "hotel": "Hôtel",
     "applied_via_moybirr": "Postulé via Moybirr",
-    "upload_failed": "Échec du téléchargement du document"
+    "upload_failed": "Échec du téléchargement du document",
+    "no_vacancies": "Aucune offre publiée."
   },
 
   "rooms": {
