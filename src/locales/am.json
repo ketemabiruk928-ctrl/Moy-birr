@@ -192,7 +192,7 @@
     "total": "ጠቅላላ",
     "my_bookings": "የእኔ ቦታ ማስያዝ",
     "confirmed_sms": "ቦታ ማስያዝ ተረጋግጧል — የማረጋገጫ SMS ተልኳል",
-    "pay_desc": "ከሞይቢር ቦርሳዎ ይክፈሉ። ከመግቢያ ከ24 ሰዓት በፊት ነፃ ስረዛ።",
+    "pay_desc": "ከሞይቢር ቦርሳዎ ይክፈሉ።",
     "nights": "{{count}} ሌሊት",
     "pay_from_wallet": "{{amount}} ከቦርሳ ክፈል",
     "guest_reviews": "የእንግዳ ግምገማዎች"
@@ -332,7 +332,7 @@
     "no_data": "እስካሁን የአፈጻጸም ውሂብ የለም።"
   },
 
-  "profile": {
+  "profile_page": {
     "pending_approval": "የሆቴል ማጽደቅ በመጠበቅ ላይ",
     "email": "ኢሜይል",
     "email_note": "ለደረሰኞች",
@@ -409,7 +409,7 @@
     "link_copied": "የደረሰኝ አገናኝ ተቀድቷል"
   },
 
-  "pay": {
+  "pay_page": {
     "scan_title": "የጠረጴዛ QR ኮድ ስካን ያድርጉ",
     "scan_desc": "ካሜራዎን ወደ ሆቴሉ QR ያመላክቱ።",
     "open_camera": "ካሜራ ክፈት እና ስካን አድርግ",
