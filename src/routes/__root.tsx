@@ -12,8 +12,8 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/lib/auth";
-import { LanguageProvider } from "@/lib/i18n";
 import { Toaster } from "@/components/ui/sonner";
+import "@/lib/i18n"; // 👈 Initializes i18next globally
 
 function NotFoundComponent() {
   return (
@@ -98,11 +98,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
-  { rel: "stylesheet", href: appCss },
-  { rel: "icon", href: "/favicon.png", type: "image/png" },
-  { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
-  { rel: "icon", href: "/icon-512.png", sizes: "512x512", type: "image/png" },
-],
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", href: "/favicon.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "icon", href: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -129,13 +129,11 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <LanguageProvider>
-        <AuthProvider>
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
-          <Toaster />
-        </AuthProvider>
-      </LanguageProvider>
+      <AuthProvider>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+        <Toaster />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
