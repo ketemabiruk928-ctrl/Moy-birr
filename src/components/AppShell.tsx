@@ -47,22 +47,20 @@ export function AppHeader({ title, subtitle }: { title: string; subtitle?: strin
             className="h-10 w-auto rounded-lg bg-white/95 object-contain p-1"
           />
           <h1 className="text-xl font-bold tracking-tight mt-1">{title}</h1>
-          {subtitle ? (
-            <p className="text-[11px] opacity-90">{subtitle}</p>
-          ) : null}
+          {subtitle ? <p className="text-[11px] opacity-90">{subtitle}</p> : null}
         </div>
 
-        {/* RIGHT SIDE: Language on top, Notification below (Stacked) */}
+        {/* RIGHT SIDE: Language + Notification stacked */}
         <div className="flex flex-col items-end gap-3">
           <select
             value={lang}
             onChange={(e) => setLang(e.target.value as typeof lang)}
             aria-label="Language"
-            className="rounded-full border border-primary-foreground/40 bg-transparent px-3 py-1 text-[10px] font-semibold text-primary-foreground"
+            className="rounded-full border border-primary-foreground/40 bg-transparent px-2 py-1 text-[10px] font-semibold text-primary-foreground"
           >
             {languages.map((l) => (
               <option key={l.code} value={l.code} className="text-foreground">
-                {l.label}
+                {l.flag} {l.label}
               </option>
             ))}
           </select>
