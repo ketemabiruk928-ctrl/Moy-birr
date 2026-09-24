@@ -260,7 +260,9 @@ function OwnerPage() {
 
       {hotel.data?.hotel_code ? (
         <div className="mx-4 -mt-4 mb-2 rounded-xl border border-border bg-card px-3 py-2 shadow-card">
-          <p className="text-[11px] text-muted-foreground">{t("hotel_id_desc")}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {t("owner_dashboard.hotel_id_desc")}
+          </p>
           <p className="text-sm font-bold tracking-wide">{hotel.data.hotel_code}</p>
         </div>
       ) : null}
@@ -320,16 +322,36 @@ function OwnerPage() {
 
         <Tabs defaultValue={hotelId ? "bookings" : "property"}>
           <TabsList className="w-full justify-start overflow-x-auto">
-            <TabsTrigger value="property">{t("owner_dashboard.tab_property")}</TabsTrigger>
-            <TabsTrigger value="rooms" disabled={!hotelId}>{t("owner_dashboard.tab_rooms")}</TabsTrigger>
-            <TabsTrigger value="showcase" disabled={!hotelId}>{t("owner_dashboard.tab_showcase")}</TabsTrigger>
-            <TabsTrigger value="bookings" disabled={!hotelId}>{t("owner_dashboard.tab_bookings")}</TabsTrigger>
-            <TabsTrigger value="staff" disabled={!hotelId}>{t("owner_dashboard.tab_staff")}</TabsTrigger>
-            <TabsTrigger value="team" disabled={!hotelId}>{t("owner_dashboard.tab_team")}</TabsTrigger>
-            <TabsTrigger value="meetings" disabled={!hotelId}>{t("owner_dashboard.tab_meetings")}</TabsTrigger>
-            <TabsTrigger value="feedback" disabled={!hotelId}>{t("owner_dashboard.tab_feedback")}</TabsTrigger>
-            <TabsTrigger value="performance" disabled={!hotelId}>{t("owner_dashboard.tab_performance")}</TabsTrigger>
-            <TabsTrigger value="jobs" disabled={!hotelId}>{t("owner_dashboard.tab_jobs")}</TabsTrigger>
+            <TabsTrigger value="property">
+              {t("owner_dashboard.tab_property")}
+            </TabsTrigger>
+            <TabsTrigger value="rooms" disabled={!hotelId}>
+              {t("owner_dashboard.tab_rooms")}
+            </TabsTrigger>
+            <TabsTrigger value="showcase" disabled={!hotelId}>
+              {t("owner_dashboard.tab_showcase")}
+            </TabsTrigger>
+            <TabsTrigger value="bookings" disabled={!hotelId}>
+              {t("owner_dashboard.tab_bookings")}
+            </TabsTrigger>
+            <TabsTrigger value="staff" disabled={!hotelId}>
+              {t("owner_dashboard.tab_staff")}
+            </TabsTrigger>
+            <TabsTrigger value="team" disabled={!hotelId}>
+              {t("owner_dashboard.tab_team")}
+            </TabsTrigger>
+            <TabsTrigger value="meetings" disabled={!hotelId}>
+              {t("owner_dashboard.tab_meetings")}
+            </TabsTrigger>
+            <TabsTrigger value="feedback" disabled={!hotelId}>
+              {t("owner_dashboard.tab_feedback")}
+            </TabsTrigger>
+            <TabsTrigger value="performance" disabled={!hotelId}>
+              {t("owner_dashboard.tab_performance")}
+            </TabsTrigger>
+            <TabsTrigger value="jobs" disabled={!hotelId}>
+              {t("owner_dashboard.tab_jobs")}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="property" className="mt-3 space-y-3">
@@ -360,7 +382,10 @@ function OwnerPage() {
               <Empty text={t("no_bookings")} />
             ) : (
               (bookings.data ?? []).map((b) => (
-                <Card key={b.id} className="shadow-card flex items-center justify-between p-4">
+                <Card
+                  key={b.id}
+                  className="shadow-card flex items-center justify-between p-4"
+                >
                   <div>
                     <p className="text-sm font-semibold">{b.room_type}</p>
                     <p className="text-xs text-muted-foreground">
@@ -401,21 +426,30 @@ function OwnerPage() {
                 </p>
                 <p className="text-xs text-muted-foreground">{t("pending_staff_hint")}</p>
                 {pendingStaff.map((s) => (
-                  <Card key={s.staff_profile_id} className="shadow-card border-primary/40 p-4">
-                    <p className="text-sm font-semibold">{s.full_name || t("staff_member")}</p>
+                  <Card
+                    key={s.staff_profile_id}
+                    className="shadow-card border-primary/40 p-4"
+                  >
+                    <p className="text-sm font-semibold">
+                      {s.full_name || t("staff_member")}
+                    </p>
                     <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
                     <p className="text-xs text-muted-foreground">
                       {[s.phone, s.moybirr_id].filter(Boolean).join(" · ")}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      {[s.city, s.subcity].filter(Boolean).join(" · ") || t("location_not_set")}
+                      {[s.city, s.subcity].filter(Boolean).join(" · ") ||
+                        t("location_not_set")}
                     </p>
                     <div className="mt-3 flex gap-2">
                       <Button
                         size="sm"
                         disabled={setStaffStatus.isPending}
                         onClick={() =>
-                          setStaffStatus.mutate({ id: s.staff_profile_id!, status: "active" })
+                          setStaffStatus.mutate({
+                            id: s.staff_profile_id!,
+                            status: "active",
+                          })
                         }
                       >
                         {t("approve")}
@@ -425,7 +459,10 @@ function OwnerPage() {
                         variant="outline"
                         disabled={setStaffStatus.isPending}
                         onClick={() =>
-                          setStaffStatus.mutate({ id: s.staff_profile_id!, status: "rejected" })
+                          setStaffStatus.mutate({
+                            id: s.staff_profile_id!,
+                            status: "rejected",
+                          })
                         }
                       >
                         {t("reject")}
@@ -444,13 +481,18 @@ function OwnerPage() {
                 <Card key={s.staff_profile_id} className="shadow-card p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold">{s.full_name || t("staff_member")}</p>
-                      <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
+                      <p className="text-sm font-semibold">
+                        {s.full_name || t("staff_member")}
+                      </p>
+                      <p className="text-xs capitalize text-muted-foreground">
+                        {s.position}
+                      </p>
                       {s.phone ? (
                         <p className="text-xs text-muted-foreground">{s.phone}</p>
                       ) : null}
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        {[s.city, s.subcity].filter(Boolean).join(" · ") || t("location_not_set")}
+                        {[s.city, s.subcity].filter(Boolean).join(" · ") ||
+                          t("location_not_set")}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
@@ -467,7 +509,10 @@ function OwnerPage() {
                         className="mt-1 h-7 px-2 text-[11px] text-destructive"
                         disabled={setStaffStatus.isPending}
                         onClick={() =>
-                          setStaffStatus.mutate({ id: s.staff_profile_id!, status: "removed" })
+                          setStaffStatus.mutate({
+                            id: s.staff_profile_id!,
+                            status: "removed",
+                          })
                         }
                       >
                         {t("remove")}
@@ -489,7 +534,9 @@ function OwnerPage() {
                 return (
                   <Card key={r.id} className="shadow-card p-4">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold">{g?.full_name || t("guest")}</p>
+                      <p className="text-sm font-semibold">
+                        {g?.full_name || t("guest")}
+                      </p>
                       <p className="flex items-center gap-1 text-sm font-bold">
                         <Star className="size-4 fill-primary text-primary" />
                         {r.stars}
@@ -528,7 +575,7 @@ function OwnerPage() {
               <PostJobDialog hotelId={hotelId} premiumActive={premiumActive} />
             ) : null}
             {(myJobs.data ?? []).length === 0 ? (
-              <Empty text={t("no_vacancies")} />
+              <Empty text={t("jobs_page.no_vacancies")} />
             ) : (
               (myJobs.data ?? []).map((j) => {
                 const apps = (j.job_applications as { id: string }[] | null) ?? [];
@@ -536,7 +583,9 @@ function OwnerPage() {
                   <Card key={j.id} className="shadow-card space-y-1 p-4">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-semibold">{j.title}</p>
-                      <Badge variant="secondary">{t(`status.${j.status}`) || j.status}</Badge>
+                      <Badge variant="secondary">
+                        {t(`status.${j.status}`) || j.status}
+                      </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {j.location}
@@ -566,7 +615,9 @@ function Stat({
 }) {
   return (
     <Card className="shadow-card p-4">
-      <div className="flex size-9 items-center justify-center rounded-xl bg-accent">{icon}</div>
+      <div className="flex size-9 items-center justify-center rounded-xl bg-accent">
+        {icon}
+      </div>
       <p className="mt-2 text-xs text-muted-foreground">{label}</p>
       <p className="text-lg font-bold">{value}</p>
     </Card>
@@ -607,22 +658,30 @@ function ApplicantDialog({ jobId, jobTitle }: { jobId: string; jobTitle: string 
       </DialogTrigger>
       <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{t("jobs.applicants_title", { job: jobTitle })}</DialogTitle>
-          <DialogDescription>{t("jobs.applicants_desc")}</DialogDescription>
+          <DialogTitle>
+            {t("jobs_page.applicants_title", { job: jobTitle })}
+          </DialogTitle>
+          <DialogDescription>{t("jobs_page.applicants_desc")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 py-4">
           {applicants.isLoading ? (
             <p className="text-center text-sm text-muted-foreground">{t("loading")}</p>
           ) : (applicants.data ?? []).length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground">{t("jobs.no_applicants")}</p>
+            <p className="text-center text-sm text-muted-foreground">
+              {t("jobs_page.no_applicants")}
+            </p>
           ) : (
             (applicants.data ?? []).map((app: any) => (
               <Card key={app.id} className="p-4 space-y-2">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="font-semibold text-sm">{app.full_name || t("applicant")}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{app.position}</p>
+                    <p className="font-semibold text-sm">
+                      {app.full_name || t("applicant")}
+                    </p>
+                    <p className="text-xs text-muted-foreground capitalize">
+                      {app.position}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1 bg-accent px-2 py-1 rounded-md">
                     <Star className="size-3 fill-primary text-primary" />
@@ -645,11 +704,11 @@ function ApplicantDialog({ jobId, jobTitle }: { jobId: string; jobTitle: string 
                     className="flex items-center gap-2 text-xs text-primary underline mt-2"
                   >
                     <FileText className="size-3" />
-                    {t("jobs.view_resume")}
+                    {t("jobs_page.view_resume")}
                   </a>
                 ) : (
                   <p className="text-xs text-muted-foreground italic mt-2">
-                    {t("jobs.no_document")}
+                    {t("jobs_page.no_document")}
                   </p>
                 )}
               </Card>
