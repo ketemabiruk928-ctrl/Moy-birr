@@ -70,14 +70,16 @@ function StaffPage() {
 
   return (
     <>
-      <AppHeader title={t("staff")} subtitle="Rated by real guests" />
+      <AppHeader title={t("staff")} subtitle={t("staff_page.subtitle")} />
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
         <Link to="/best-staff" className="block">
           <Card className="shadow-card flex items-center justify-between p-4">
             <div>
-              <p className="text-sm font-semibold">Best staff this week</p>
-              <p className="text-xs text-muted-foreground">Top rated workers and their hotels</p>
+              <p className="text-sm font-semibold">{t("staff_page.best_this_week")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("staff_page.best_this_week_desc")}
+              </p>
             </div>
             <Star className="size-5 fill-primary text-primary" />
           </Card>
@@ -85,7 +87,7 @@ function StaffPage() {
 
         <Card className="shadow-card space-y-3 p-4">
           <Input
-            placeholder="Filter by city (Addis Ababa, Hawassa…)"
+            placeholder={t("staff_page.filter_city")}
             value={city}
             onChange={(e) => setCity(e.target.value)}
           />
@@ -98,7 +100,7 @@ function StaffPage() {
                   minRating === r ? "border-primary bg-accent" : "border-border"
                 }`}
               >
-                {r === 0 ? "All" : `${r}+ ★`}
+                {r === 0 ? t("staff_page.all") : `${r}+ ★`}
               </button>
             ))}
           </div>
@@ -108,7 +110,11 @@ function StaffPage() {
               className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold"
             >
               <Navigation className="size-3.5 text-primary" />
-              {status === "locating" ? "Locating…" : me ? "Refresh GPS" : "Use my location"}
+              {status === "locating"
+                ? t("hotels_page.locating")
+                : me
+                  ? t("hotels_page.refresh_gps")
+                  : t("hotels_page.use_location")}
             </button>
             <button
               onClick={() => setNearFirst((v) => !v)}
@@ -117,27 +123,27 @@ function StaffPage() {
                 me && nearFirst ? "border-primary bg-accent" : "border-border"
               }`}
             >
-              Nearest first
+              {t("hotels_page.nearest_first")}
             </button>
             <Link
               to="/map"
               className="ml-auto flex items-center gap-1.5 rounded-full border border-primary px-3 py-1.5 text-xs font-semibold text-primary"
             >
               <MapIcon className="size-3.5" />
-              Map view
+              {t("hotels_page.map_view")}
             </Link>
           </div>
         </Card>
 
         {list.length === 0 ? (
           <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-            No staff match your filters yet.
+            {t("staff_page.no_staff")}
           </Card>
         ) : (
           list.map((s) => {
             const p = s.profiles as { full_name?: string } | null;
             const h = s.hotels as { name?: string } | null;
-            const name = p?.full_name || "Staff member";
+            const name = p?.full_name || t("staff_member");
             return (
               <Card key={s.id} className="shadow-card flex items-center gap-3 p-4">
                 <Avatar className="size-11">
@@ -153,7 +159,9 @@ function StaffPage() {
                   <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                     <MapPin className="size-3" />
                     {s.city}
-                    {s.dist != null ? ` · ${formatDistance(s.dist)} away` : ""}
+                    {s.dist != null
+                      ? ` · ${formatDistance(s.dist)} ${t("hotels_page.away")}`
+                      : ""}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
@@ -161,7 +169,9 @@ function StaffPage() {
                     <Star className="size-4 fill-primary text-primary" />
                     {Number(s.rating).toFixed(1)}
                   </p>
-                  <p className="text-[11px] text-muted-foreground">{s.rating_count} ratings</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {s.rating_count} {t("profile.ratings")}
+                  </p>
                 </div>
               </Card>
             );
