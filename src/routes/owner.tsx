@@ -141,10 +141,10 @@ function OwnerPage() {
     onSuccess: (_d, vars) => {
       toast.success(
         vars.status === "active"
-          ? "Staff member approved"
+          ? t("staff_approved")
           : vars.status === "rejected"
-            ? "Request rejected"
-            : "Staff member removed",
+            ? t("request_rejected")
+            : t("staff_removed"),
       );
       void qc.invalidateQueries({ queryKey: ["owner-staff", hotelId] });
     },
@@ -183,7 +183,6 @@ function OwnerPage() {
     },
   });
 
-  // Note: staff_tips_total is REMOVED from this query
   const performance = useQuery({
     queryKey: ["owner-summary", hotelId],
     enabled: !!hotelId,
@@ -215,7 +214,7 @@ function OwnerPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Premium active for 30 days");
+      toast.success(t("premium_success"));
       void qc.invalidateQueries({ queryKey: ["owner-plan"] });
       void qc.invalidateQueries({ queryKey: ["my-hotel"] });
       void qc.invalidateQueries({ queryKey: ["owner-summary"] });
@@ -227,7 +226,7 @@ function OwnerPage() {
   if (role === null) {
     return (
       <>
-        <AppHeader title="Owner dashboard" subtitle="Loading…" />
+        <AppHeader title={t("owner")} subtitle={t("loading")} />
         <div className="-mt-6 flex items-center justify-center px-4 py-16">
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
         </div>
@@ -238,12 +237,10 @@ function OwnerPage() {
   if (role !== "owner") {
     return (
       <>
-        <AppHeader title={t("owner")} subtitle="Hotel owners only" />
+        <AppHeader title={t("owner")} subtitle={t("owners_only")} />
         <div className="-mt-6 px-4">
           <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-            This dashboard is available to hotel owner accounts. Your account
-            role is <span className="font-semibold">{role}</span>. Register a
-            new account with the Owner role, or contact support to change it.
+            {t("owner_only_message")}
           </Card>
         </div>
       </>
@@ -258,14 +255,12 @@ function OwnerPage() {
     <>
       <AppHeader
         title={t("owner")}
-        subtitle={hotel.data?.name ?? "Register your property below"}
+        subtitle={hotel.data?.name ?? t("register_property_below")}
       />
 
       {hotel.data?.hotel_code ? (
         <div className="mx-4 -mt-4 mb-2 rounded-xl border border-border bg-card px-3 py-2 shadow-card">
-          <p className="text-[11px] text-muted-foreground">
-            Hotel ID (give this to your staff)
-          </p>
+          <p className="text-[11px] text-muted-foreground">{t("hotel_id_desc")}</p>
           <p className="text-sm font-bold tracking-wide">{hotel.data.hotel_code}</p>
         </div>
       ) : null}
@@ -275,22 +270,22 @@ function OwnerPage() {
           <div>
             <p className="flex items-center gap-1.5 text-sm font-semibold">
               <Crown className="size-4 text-primary" />
-              Monthly listing plan
+              {t("monthly_plan")}
             </p>
             <p className="text-xs text-muted-foreground">
               {plan.isLoading
-                ? "Checking…"
+                ? t("checking")
                 : premiumActive
-                  ? "Active — your listing is visible to guests"
-                  : "500 ETB / month — required to stay listed, post jobs and see analytics"}
+                  ? t("owner_dashboard.premium_active")
+                  : t("owner_dashboard.premium_inactive")}
             </p>
           </div>
           {!premiumActive && !plan.isLoading ? (
             <Button size="sm" disabled={subscribe.isPending} onClick={() => subscribe.mutate()}>
-              {subscribe.isPending ? "Paying…" : "Pay 500 ETB"}
+              {subscribe.isPending ? t("paying") : t("owner_dashboard.pay_subscription")}
             </Button>
           ) : premiumActive ? (
-            <Badge variant="secondary">Active</Badge>
+            <Badge variant="secondary">{t("status.active")}</Badge>
           ) : null}
         </Card>
 
@@ -298,9 +293,7 @@ function OwnerPage() {
           <Card className="shadow-card flex items-start gap-2 border-destructive/40 p-4">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
             <p className="text-xs text-muted-foreground">
-              Your listing is <span className="font-semibold text-destructive">paused</span>.
-              Guests cannot see your hotel, rooms or showcase and cannot book until
-              this month&apos;s 500 ETB is paid. Everything is restored the moment you pay.
+              {t("owner_dashboard.paused_warning")}
             </p>
           </Card>
         ) : null}
@@ -309,18 +302,17 @@ function OwnerPage() {
           <div className="grid grid-cols-2 gap-3">
             <Stat
               icon={<TrendingUp className="size-4 text-primary" />}
-              label="Room revenue"
+              label={t("owner_dashboard.room_revenue")}
               value={formatETB(roomRevenue)}
             />
-            {/* REMOVED: Staff tips card was here */}
             <Stat
               icon={<BedDouble className="size-4 text-primary" />}
-              label="Active stays"
+              label={t("owner_dashboard.active_stays")}
               value={String(occupancy)}
             />
             <Stat
               icon={<Users className="size-4 text-primary" />}
-              label="Staff members"
+              label={t("owner_dashboard.staff_members")}
               value={String(activeStaff.length)}
             />
           </div>
@@ -328,24 +320,24 @@ function OwnerPage() {
 
         <Tabs defaultValue={hotelId ? "bookings" : "property"}>
           <TabsList className="w-full justify-start overflow-x-auto">
-            <TabsTrigger value="property">Property</TabsTrigger>
-            <TabsTrigger value="rooms" disabled={!hotelId}>Rooms</TabsTrigger>
-            <TabsTrigger value="showcase" disabled={!hotelId}>Showcase</TabsTrigger>
-            <TabsTrigger value="bookings" disabled={!hotelId}>Bookings</TabsTrigger>
-            <TabsTrigger value="staff" disabled={!hotelId}>Staff</TabsTrigger>
-            <TabsTrigger value="team" disabled={!hotelId}>Team chat</TabsTrigger>
-            <TabsTrigger value="meetings" disabled={!hotelId}>Meetings</TabsTrigger>
-            <TabsTrigger value="feedback" disabled={!hotelId}>Guest messages</TabsTrigger>
-            <TabsTrigger value="performance" disabled={!hotelId}>Performance</TabsTrigger>
-            <TabsTrigger value="jobs" disabled={!hotelId}>Jobs</TabsTrigger>
+            <TabsTrigger value="property">{t("owner_dashboard.tab_property")}</TabsTrigger>
+            <TabsTrigger value="rooms" disabled={!hotelId}>{t("owner_dashboard.tab_rooms")}</TabsTrigger>
+            <TabsTrigger value="showcase" disabled={!hotelId}>{t("owner_dashboard.tab_showcase")}</TabsTrigger>
+            <TabsTrigger value="bookings" disabled={!hotelId}>{t("owner_dashboard.tab_bookings")}</TabsTrigger>
+            <TabsTrigger value="staff" disabled={!hotelId}>{t("owner_dashboard.tab_staff")}</TabsTrigger>
+            <TabsTrigger value="team" disabled={!hotelId}>{t("owner_dashboard.tab_team")}</TabsTrigger>
+            <TabsTrigger value="meetings" disabled={!hotelId}>{t("owner_dashboard.tab_meetings")}</TabsTrigger>
+            <TabsTrigger value="feedback" disabled={!hotelId}>{t("owner_dashboard.tab_feedback")}</TabsTrigger>
+            <TabsTrigger value="performance" disabled={!hotelId}>{t("owner_dashboard.tab_performance")}</TabsTrigger>
+            <TabsTrigger value="jobs" disabled={!hotelId}>{t("owner_dashboard.tab_jobs")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="property" className="mt-3 space-y-3">
             <PropertyForm hotel={hotel.data ?? null} />
             {hotelId && hotel.data?.hotel_code ? (
               <TipQr
-                title="Table QR code"
-                description="Print this for your tables and reception. Guests scan it to pay the bill and tip your staff."
+                title={t("table_qr_title")}
+                description={t("table_qr_desc")}
                 hotelCode={hotel.data.hotel_code}
               />
             ) : null}
@@ -363,9 +355,9 @@ function OwnerPage() {
 
           <TabsContent value="bookings" className="mt-3 space-y-3">
             {bookings.isLoading ? (
-              <Empty text="Loading bookings…" />
+              <Empty text={t("loading_bookings")} />
             ) : (bookings.data ?? []).length === 0 ? (
-              <Empty text="No bookings yet." />
+              <Empty text={t("no_bookings")} />
             ) : (
               (bookings.data ?? []).map((b) => (
                 <Card key={b.id} className="shadow-card flex items-center justify-between p-4">
@@ -381,7 +373,7 @@ function OwnerPage() {
                       variant={b.status === "cancelled" ? "destructive" : "secondary"}
                       className="mt-1"
                     >
-                      {b.status}
+                      {t(`status.${b.status}`) || b.status}
                     </Badge>
                   </div>
                 </Card>
@@ -391,13 +383,13 @@ function OwnerPage() {
 
           <TabsContent value="staff" className="mt-3 space-y-3">
             <Card className="shadow-card p-4">
-              <p className="text-xs text-muted-foreground">Hotel service rating</p>
+              <p className="text-xs text-muted-foreground">{t("hotel_service_rating")}</p>
               <p className="mt-1 text-2xl font-bold">
                 {Number(hotel.data?.rating ?? 0) > 0
                   ? Number(hotel.data?.rating).toFixed(1)
                   : "—"}
                 <span className="ml-1 text-sm font-normal text-muted-foreground">
-                  / 5 · {hotel.data?.rating_count ?? 0} reviews
+                  / 5 · {hotel.data?.rating_count ?? 0} {t("reviews")}
                 </span>
               </p>
             </Card>
@@ -405,21 +397,18 @@ function OwnerPage() {
             {pendingStaff.length > 0 ? (
               <>
                 <p className="text-sm font-semibold">
-                  Waiting for your approval ({pendingStaff.length})
+                  {t("waiting_approval")} ({pendingStaff.length})
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  These people entered your Hotel ID. They cannot receive tips at
-                  your property until you approve them.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("pending_staff_hint")}</p>
                 {pendingStaff.map((s) => (
                   <Card key={s.staff_profile_id} className="shadow-card border-primary/40 p-4">
-                    <p className="text-sm font-semibold">{s.full_name || "Staff member"}</p>
+                    <p className="text-sm font-semibold">{s.full_name || t("staff_member")}</p>
                     <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
                     <p className="text-xs text-muted-foreground">
                       {[s.phone, s.moybirr_id].filter(Boolean).join(" · ")}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      {[s.city, s.subcity].filter(Boolean).join(" · ") || "Location not set"}
+                      {[s.city, s.subcity].filter(Boolean).join(" · ") || t("location_not_set")}
                     </p>
                     <div className="mt-3 flex gap-2">
                       <Button
@@ -429,7 +418,7 @@ function OwnerPage() {
                           setStaffStatus.mutate({ id: s.staff_profile_id!, status: "active" })
                         }
                       >
-                        Approve
+                        {t("approve")}
                       </Button>
                       <Button
                         size="sm"
@@ -439,7 +428,7 @@ function OwnerPage() {
                           setStaffStatus.mutate({ id: s.staff_profile_id!, status: "rejected" })
                         }
                       >
-                        Reject
+                        {t("reject")}
                       </Button>
                     </div>
                   </Card>
@@ -447,21 +436,21 @@ function OwnerPage() {
               </>
             ) : null}
 
-            <p className="pt-2 text-sm font-semibold">Staff performance</p>
+            <p className="pt-2 text-sm font-semibold">{t("staff_performance")}</p>
             {activeStaff.length === 0 ? (
-              <Empty text="No approved staff yet. Share your Hotel ID so staff can request to join." />
+              <Empty text={t("no_staff_hint")} />
             ) : (
               activeStaff.map((s) => (
                 <Card key={s.staff_profile_id} className="shadow-card p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold">{s.full_name || "Staff member"}</p>
+                      <p className="text-sm font-semibold">{s.full_name || t("staff_member")}</p>
                       <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
                       {s.phone ? (
                         <p className="text-xs text-muted-foreground">{s.phone}</p>
                       ) : null}
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        {[s.city, s.subcity].filter(Boolean).join(" · ") || "Location not set"}
+                        {[s.city, s.subcity].filter(Boolean).join(" · ") || t("location_not_set")}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
@@ -470,7 +459,7 @@ function OwnerPage() {
                         {Number(s.rating).toFixed(1)}
                       </p>
                       <p className="text-[11px] text-muted-foreground">
-                        {s.rating_count} guest ratings
+                        {s.rating_count} {t("guest_ratings")}
                       </p>
                       <Button
                         size="sm"
@@ -481,7 +470,7 @@ function OwnerPage() {
                           setStaffStatus.mutate({ id: s.staff_profile_id!, status: "removed" })
                         }
                       >
-                        Remove
+                        {t("remove")}
                       </Button>
                     </div>
                   </div>
@@ -489,18 +478,18 @@ function OwnerPage() {
               ))
             )}
 
-            <p className="pt-2 text-sm font-semibold">Recent hotel reviews</p>
+            <p className="pt-2 text-sm font-semibold">{t("recent_reviews")}</p>
             {hotelRatings.isLoading ? (
-              <Empty text="Loading reviews…" />
+              <Empty text={t("loading_reviews")} />
             ) : (hotelRatings.data ?? []).length === 0 ? (
-              <Empty text="No hotel service reviews yet." />
+              <Empty text={t("no_reviews")} />
             ) : (
               (hotelRatings.data ?? []).map((r) => {
                 const g = r.profiles as { full_name?: string } | null;
                 return (
                   <Card key={r.id} className="shadow-card p-4">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold">{g?.full_name || "Guest"}</p>
+                      <p className="text-sm font-semibold">{g?.full_name || t("guest")}</p>
                       <p className="flex items-center gap-1 text-sm font-bold">
                         <Star className="size-4 fill-primary text-primary" />
                         {r.stars}
@@ -539,7 +528,7 @@ function OwnerPage() {
               <PostJobDialog hotelId={hotelId} premiumActive={premiumActive} />
             ) : null}
             {(myJobs.data ?? []).length === 0 ? (
-              <Empty text="No vacancies posted yet." />
+              <Empty text={t("no_vacancies")} />
             ) : (
               (myJobs.data ?? []).map((j) => {
                 const apps = (j.job_applications as { id: string }[] | null) ?? [];
@@ -547,14 +536,13 @@ function OwnerPage() {
                   <Card key={j.id} className="shadow-card space-y-1 p-4">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-semibold">{j.title}</p>
-                      <Badge variant="secondary">{j.status}</Badge>
+                      <Badge variant="secondary">{t(`status.${j.status}`) || j.status}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {j.location}
-                      {j.salary ? ` · ${formatETB(j.salary)} / month` : ""}
+                      {j.salary ? ` · ${formatETB(j.salary)} / ${t("month")}` : ""}
                     </p>
-                    
-                    {/* NEW: Dialog to view applicants securely */}
+
                     <ApplicantDialog jobId={j.id} jobTitle={j.title} />
                   </Card>
                 );
@@ -593,19 +581,16 @@ function Empty({ text }: { text: string }) {
   );
 }
 
-/* NEW COMPONENT: ApplicantDialog 
-   This fetches from the safe 'owner_job_applicants' view.
-   It shows stars but DOES NOT show tips.
-*/
 function ApplicantDialog({ jobId, jobTitle }: { jobId: string; jobTitle: string }) {
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
 
   const applicants = useQuery({
     queryKey: ["job-applicants", jobId],
-    enabled: !!jobId && open, // Only fetch when dialog opens
+    enabled: !!jobId && open,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("owner_job_applicants") // Safe view - hides tips
+        .from("owner_job_applicants")
         .select("*")
         .eq("job_id", jobId);
       if (error) throw error;
@@ -617,28 +602,26 @@ function ApplicantDialog({ jobId, jobTitle }: { jobId: string; jobTitle: string 
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="w-full mt-2">
-          View Applicants
+          {t("staff_actions.view_applicants")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Applicants for {jobTitle}</DialogTitle>
-          <DialogDescription>
-            Candidates who applied. Tip amounts are hidden for privacy.
-          </DialogDescription>
+          <DialogTitle>{t("jobs.applicants_title", { job: jobTitle })}</DialogTitle>
+          <DialogDescription>{t("jobs.applicants_desc")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 py-4">
           {applicants.isLoading ? (
-            <p className="text-center text-sm text-muted-foreground">Loading...</p>
+            <p className="text-center text-sm text-muted-foreground">{t("loading")}</p>
           ) : (applicants.data ?? []).length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground">No applicants yet.</p>
+            <p className="text-center text-sm text-muted-foreground">{t("jobs.no_applicants")}</p>
           ) : (
             (applicants.data ?? []).map((app: any) => (
               <Card key={app.id} className="p-4 space-y-2">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="font-semibold text-sm">{app.full_name || "Applicant"}</p>
+                    <p className="font-semibold text-sm">{app.full_name || t("applicant")}</p>
                     <p className="text-xs text-muted-foreground capitalize">{app.position}</p>
                   </div>
                   <div className="flex items-center gap-1 bg-accent px-2 py-1 rounded-md">
@@ -648,24 +631,26 @@ function ApplicantDialog({ jobId, jobTitle }: { jobId: string; jobTitle: string 
                     </span>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Phone className="size-3" />
-                  {app.phone || "No phone provided"}
+                  {app.phone || t("no_phone_provided")}
                 </div>
 
                 {app.document_url ? (
-                  <a 
-                    href={app.document_url} 
-                    target="_blank" 
+                  <a
+                    href={app.document_url}
+                    target="_blank"
                     rel="noreferrer"
                     className="flex items-center gap-2 text-xs text-primary underline mt-2"
                   >
                     <FileText className="size-3" />
-                    View Resume / Certificate
+                    {t("jobs.view_resume")}
                   </a>
                 ) : (
-                  <p className="text-xs text-muted-foreground italic mt-2">No document attached</p>
+                  <p className="text-xs text-muted-foreground italic mt-2">
+                    {t("jobs.no_document")}
+                  </p>
                 )}
               </Card>
             ))
@@ -683,6 +668,7 @@ function PostJobDialog({
   hotelId: string;
   premiumActive: boolean;
 }) {
+  const { t } = useLang();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -702,7 +688,7 @@ function PostJobDialog({
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Vacancy posted — 200 ETB charged to your wallet");
+      toast.success(t("vacancy_posted_success"));
       void qc.invalidateQueries({ queryKey: ["owner-jobs"] });
       void qc.invalidateQueries({ queryKey: ["jobs"] });
       void qc.invalidateQueries({ queryKey: ["wallet"] });
@@ -720,29 +706,26 @@ function PostJobDialog({
       <DialogTrigger asChild>
         <Button className="w-full" disabled={!premiumActive}>
           <Plus className="mr-2 size-4" />
-          {premiumActive ? "Post a vacancy (200 ETB)" : "Subscribe to premium to post jobs"}
+          {premiumActive ? t("post_vacancy_btn") : t("subscribe_to_post")}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Post a vacancy</DialogTitle>
-          <DialogDescription>
-            200 ETB is deducted from your wallet. The vacancy is visible to all
-            staff accounts.
-          </DialogDescription>
+          <DialogTitle>{t("post_vacancy_title")}</DialogTitle>
+          <DialogDescription>{t("post_vacancy_desc")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="jt">Job title</Label>
+            <Label htmlFor="jt">{t("job_title")}</Label>
             <Input
               id="jt"
-              placeholder="Senior waiter"
+              placeholder={t("job_title_placeholder")}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="jd">Description</Label>
+            <Label htmlFor="jd">{t("job_description")}</Label>
             <Textarea
               id="jd"
               value={description}
@@ -751,7 +734,7 @@ function PostJobDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="jl">Location</Label>
+              <Label htmlFor="jl">{t("job_location")}</Label>
               <Input
                 id="jl"
                 placeholder="Addis Ababa"
@@ -760,7 +743,7 @@ function PostJobDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="js">Salary (ETB)</Label>
+              <Label htmlFor="js">{t("job_salary")}</Label>
               <Input
                 id="js"
                 type="number"
@@ -775,7 +758,7 @@ function PostJobDialog({
             disabled={!title || !location || post.isPending}
             onClick={() => post.mutate()}
           >
-            Pay 200 ETB & publish
+            {t("pay_publish_btn")}
           </Button>
         </div>
       </DialogContent>
