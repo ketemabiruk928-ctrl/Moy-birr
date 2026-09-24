@@ -213,7 +213,7 @@
     "subtitle": "Keessummoota dhugaa tiin madaalame",
     "best_this_week": "Hojjettoota gaarii torbee kana",
     "best_this_week_desc": "Hojjettoota sadarkaa olaanaa fi hoteelota isaanii",
-    "filter_city": "Magaalaan calali (Finfinnee, Hawaasaa…)",
+    "filter_city": "Magaalaan calali",
     "all": "Hunda",
     "no_staff": "Hojjetaan calaltuu keetiin walsimu hin jiru."
   },
@@ -332,7 +332,7 @@
     "no_data": "Daataan raawwii hin jiru."
   },
 
-  "profile": {
+  "profile_page": {
     "pending_approval": "Mirkaneessa hoteelaa eegaa jira",
     "email": "Imeelii",
     "email_note": "nagahee",
@@ -409,7 +409,7 @@
     "link_copied": "Liinkii nagahee waraabameera"
   },
 
-  "pay": {
+  "pay_page": {
     "scan_title": "Koodii QR minjaalaa iskaani",
     "scan_desc": "Kaameraa kee QR hoteelaa qajeelchi.",
     "open_camera": "Kaameraa bani & iskaani",
