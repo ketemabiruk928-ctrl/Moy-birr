@@ -195,8 +195,7 @@ function AuthPage() {
           </div>
 
           <img src="/logo.png" alt="Moybirr" className="h-14 w-auto mt-2" />
-          <h1 className="mt-5 text-3xl font-bold tracking-tight">{t("auth.app_title")}</h1>
-          <p className="mt-2 max-w-xs text-sm opacity-90">{t("app_tagline")}</p>
+          <p className="mt-4 max-w-xs text-sm opacity-90">{t("app_tagline")}</p>
           <p className="mt-1 text-xs opacity-75">{t("auth.app_author")}</p>
         </div>
       </div>
