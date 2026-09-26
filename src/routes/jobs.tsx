@@ -44,6 +44,7 @@ function JobsPage() {
   const qc = useQueryClient();
   const [applying, setApplying] = useState<string | null>(null);
 
+  // Track document URLs per job ID
   const [documentUrls, setDocumentUrls] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<string | null>(null);
 
@@ -65,7 +66,7 @@ function JobsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("job_applications")
-        .select("job_id,status")
+        .select("job_id,status,document_url")
         .eq("staff_id", user!.id);
       if (error) throw error;
       return data ?? [];
@@ -82,7 +83,7 @@ function JobsPage() {
 
       const { data, error } = await supabase.storage
         .from("staff_documents")
-        .upload(fileName, file);
+        .upload(fileName, file, { upsert: true });
 
       if (error) throw error;
 
@@ -179,10 +180,20 @@ function JobsPage() {
                     <div className="space-y-1.5">
                       <Label className="text-xs">{t("jobs_page.attach_resume")}</Label>
                       {docUrl ? (
-                        <div className="flex items-center gap-2 rounded-md bg-muted p-2 text-xs text-primary">
-                          <FileText className="size-4" />
-                          <span className="truncate">{t("jobs_page.document_attached")}</span>
-                        </div>
+                        <a
+                          href={docUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-2 rounded-md bg-accent p-2 text-xs font-medium text-primary hover:bg-accent/80"
+                        >
+                          <FileText className="size-4 shrink-0" />
+                          <span className="truncate">
+                            {t("jobs_page.document_attached")}
+                          </span>
+                          <span className="ml-auto shrink-0 text-[10px] underline">
+                            {t("jobs_page.view_resume")}
+                          </span>
+                        </a>
                       ) : (
                         <div className="relative">
                           <Input
@@ -195,7 +206,10 @@ function JobsPage() {
                             }}
                             disabled={uploading === j.id}
                           />
-                          <Button variant="outline" className="w-full pointer-events-none">
+                          <Button
+                            variant="outline"
+                            className="w-full pointer-events-none"
+                          >
                             <Upload className="mr-2 size-4" />
                             {uploading === j.id
                               ? t("jobs_page.uploading")
