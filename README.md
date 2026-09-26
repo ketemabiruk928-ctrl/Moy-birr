@@ -1,27 +1,29 @@
-# Welcome to moy birr 
+# Moybirr
 
-This project was built with 
+**Ethiopia's hospitality commerce and workforce platform.**
 
-## Build with ELSHADAY BG .
+Moybirr connects guests, hotels, restaurants, and staff through local discovery, digital payments, direct tipping, bookings, recruitment, and operational analytics — while integrating with approved fiscal POS and electronic-invoicing systems.
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+## What Moybirr Does
 
-## Development
+- **Guest layer** — Hotel & restaurant discovery, room booking, QR bill payment, direct staff tipping, reviews, and digital receipts
+- **Staff layer** — Verified worker profiles, tip history, job marketplace, team chat, and shift management
+- **Owner layer** — Property management, room pricing, staff operations, revenue analytics, and compliance dashboards
+- **Compliance layer** — Integration with approved fiscal POS and electronic-invoicing providers (Directive 1142/2026)
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+## Tech Stack
+
+- **Frontend:** React 19 + TanStack Router + TanStack Start
+- **Styling:** Tailwind CSS v4 + shadcn/ui
+- **Backend:** Supabase (PostgreSQL, Auth, Storage, Realtime)
+- **Build:** Vite 8 + Nitro (Vercel)
+- **Languages:** Amharic, Afaan Oromoo, Kiswahili, French, Arabic, English
+- **Payments:** Telebirr, EthSwitch, bank integration (via approved providers)
+
+## Getting Started
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+git clone <your-repository-url>
+cd Moy-birr
+npm install
 npm run dev
-```
-
-## Built with
-
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
