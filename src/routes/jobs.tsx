@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Briefcase, MapPin, Banknote, Upload, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,9 +44,26 @@ function JobsPage() {
   const qc = useQueryClient();
   const [applying, setApplying] = useState<string | null>(null);
 
-  // Track document URLs per job ID
+  // Track document URLs — persisted in localStorage so they survive refreshes
   const [documentUrls, setDocumentUrls] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<string | null>(null);
+
+  // Restore uploaded URLs from localStorage on mount
+  useEffect(() => {
+    if (!user) return;
+    const restored: Record<string, string> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(`moybirr_doc_${user.id}_`)) {
+        const jobId = key.replace(`moybirr_doc_${user.id}_`, "");
+        const value = localStorage.getItem(key);
+        if (value) restored[jobId] = value;
+      }
+    }
+    if (Object.keys(restored).length > 0) {
+      setDocumentUrls(restored);
+    }
+  }, [user]);
 
   const jobs = useQuery({
     queryKey: ["jobs"],
@@ -91,7 +108,15 @@ function JobsPage() {
         .from("staff_documents")
         .getPublicUrl(data.path);
 
+      // Save to state
       setDocumentUrls((prev) => ({ ...prev, [jobId]: urlData.publicUrl }));
+
+      // Save to localStorage so it survives page refresh
+      localStorage.setItem(
+        `moybirr_doc_${user.id}_${jobId}`,
+        urlData.publicUrl,
+      );
+
       toast.success(t("jobs_page.document_attached"));
     } catch (e: any) {
       toast.error(t("jobs_page.upload_failed") + ": " + e.message);
@@ -102,15 +127,24 @@ function JobsPage() {
 
   const apply = useMutation({
     mutationFn: async (jobId: string) => {
+      // Prefer state, fall back to localStorage
+      const docUrl =
+        documentUrls[jobId] ||
+        localStorage.getItem(`moybirr_doc_${user!.id}_${jobId}`) ||
+        null;
+
       const { error } = await supabase
         .from("job_applications")
         .insert({
           job_id: jobId,
           staff_id: user!.id,
           message: t("jobs_page.applied_via_moybirr"),
-          document_url: documentUrls[jobId] || null,
+          document_url: docUrl,
         });
       if (error) throw error;
+
+      // Clean up localStorage after successful apply
+      localStorage.removeItem(`moybirr_doc_${user!.id}_${jobId}`);
     },
     onSuccess: () => {
       toast.success(t("jobs_page.apply_success"));
@@ -178,7 +212,9 @@ function JobsPage() {
                 {role === "staff" ? (
                   <div className="space-y-3 pt-2 border-t border-border">
                     <div className="space-y-1.5">
-                      <Label className="text-xs">{t("jobs_page.attach_resume")}</Label>
+                      <Label className="text-xs">
+                        {t("jobs_page.attach_resume")}
+                      </Label>
                       {docUrl ? (
                         <a
                           href={docUrl}
