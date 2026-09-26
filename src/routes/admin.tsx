@@ -99,7 +99,7 @@ function AdminPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("hotel_media")
-        .select("id, kind, url, caption, moderation_status, created_at, hotels:hotel_id(name)")
+        .select("id, kind, url, video_url, caption, moderation_status, created_at, hotels:hotel_id(name)")
         .eq("moderation_status", "pending")
         .order("created_at", { ascending: false })
         .limit(50);
@@ -109,11 +109,16 @@ function AdminPage() {
   });
 
   const moderateMedia = useMutation({
-    mutationFn: async (payload: { id: string; status: "approved" | "rejected" }) => {
-      const { error } = await supabase
-        .from("hotel_media")
-        .update({ moderation_status: payload.status })
-        .eq("id", payload.id);
+    mutationFn: async (payload: {
+      id: string;
+      status: "approved" | "rejected";
+      reason?: string;
+    }) => {
+      const { error } = await supabase.rpc("moderate_media", {
+        _media_id: payload.id,
+        _status: payload.status,
+        _reason: payload.reason ?? null,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -332,13 +337,14 @@ function AdminPage() {
           ) : (
             (pendingMedia.data ?? []).map((m) => {
               const hotel = m.hotels as { name?: string } | null;
+              const mediaUrl = m.kind === "video" ? (m.video_url || m.url) : m.url;
               return (
                 <div key={m.id} className="space-y-2 rounded-xl border border-border p-3">
                   <p className="text-sm font-semibold">{hotel?.name || "Hotel"}</p>
                   <p className="text-xs capitalize text-muted-foreground">{m.kind}</p>
                   {m.caption ? <p className="text-xs">{m.caption}</p> : null}
                   <a
-                    href={m.url}
+                    href={mediaUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs text-primary underline"
@@ -357,7 +363,18 @@ function AdminPage() {
                       size="sm"
                       variant="destructive"
                       disabled={moderateMedia.isPending}
-                      onClick={() => moderateMedia.mutate({ id: m.id, status: "rejected" })}
+                      onClick={() => {
+                        const r = prompt("Reason for rejection (min 3 characters):");
+                        if (!r || r.trim().length < 3) {
+                          toast.error("Reason must be at least 3 characters");
+                          return;
+                        }
+                        moderateMedia.mutate({
+                          id: m.id,
+                          status: "rejected",
+                          reason: r.trim(),
+                        });
+                      }}
                     >
                       Reject
                     </Button>
@@ -453,5 +470,3 @@ function Stat({ label, value }: { label: string; value: number | string | undefi
     </div>
   );
 }
-
-      
