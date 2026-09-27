@@ -121,7 +121,23 @@
     "view_license": "Ona leseni ya sasa",
     "upload_license": "Pakia leseni ya biashara",
     "doc_url_placeholder": "…au bandika URL ya hati",
-    "save_changes": "Hifadhi mabadiliko"
+    "save_changes": "Hifadhi mabadiliko",
+    "compliance_section": "Kodi na Uzingatiaji",
+    "compliance_desc": "Inahitajika kwa ankara za kielektroniki za Wizara ya Mapato. Acha wazi ikiwa haujasajiliwa bado.",
+    "legal_name": "Jina la kisheria la biashara",
+    "legal_name_placeholder": "Kama inavyoonekana kwenye leseni yako",
+    "tin": "TIN (Nambari ya Utambulisho wa Mlipa Kodi)",
+    "tin_placeholder": "TIN ya tarakimu 10",
+    "vat_number": "Nambari ya VAT (ikiwa inatumika)",
+    "vat_placeholder": "Nambari ya usajili wa VAT",
+    "business_license_no": "Nambari ya leseni ya biashara",
+    "business_license_placeholder": "Nambari ya leseni",
+    "business_region": "Mkoa",
+    "business_wereda": "Wereda",
+    "business_subcity": "Wilaya",
+    "business_house_no": "Nambari ya nyumba",
+    "fiscal_provider": "Mtoa huduma wa kodi",
+    "fiscal_provider_placeholder": "mf. Zoorya, MoR-direct"
   },
 
   "wallet": {
