@@ -474,7 +474,7 @@ export function ShowcaseManager({
         kind: kind,
         caption: caption,
         moderation_status: "pending",
-        url: kind === "photo" ? url : null,
+        url: url,
         video_url: kind === "video" ? url : null,
       };
 
