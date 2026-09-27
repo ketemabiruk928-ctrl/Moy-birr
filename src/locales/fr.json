@@ -121,7 +121,23 @@
     "view_license": "Voir la licence actuelle",
     "upload_license": "Télécharger la licence",
     "doc_url_placeholder": "…ou collez une URL de document",
-    "save_changes": "Enregistrer les modifications"
+    "save_changes": "Enregistrer les modifications",
+    "compliance_section": "Taxes et conformité",
+    "compliance_desc": "Requis pour la facturation électronique du Ministère des Revenus. Laissez vide si non enregistré.",
+    "legal_name": "Nom légal de l'entreprise",
+    "legal_name_placeholder": "Comme indiqué sur votre licence",
+    "tin": "NIF (Numéro d'Identification Fiscale)",
+    "tin_placeholder": "NIF à 10 chiffres",
+    "vat_number": "Numéro de TVA (si applicable)",
+    "vat_placeholder": "Numéro de TVA",
+    "business_license_no": "Numéro de licence commerciale",
+    "business_license_placeholder": "Numéro de licence",
+    "business_region": "Région",
+    "business_wereda": "Wereda",
+    "business_subcity": "Sous-ville",
+    "business_house_no": "Numéro de maison",
+    "fiscal_provider": "Fournisseur de fiscalisation",
+    "fiscal_provider_placeholder": "ex. Zoorya, MoR-direct"
   },
 
   "wallet": {
