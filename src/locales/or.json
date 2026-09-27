@@ -121,7 +121,23 @@
     "view_license": "Hayyama ammaa ilaali",
     "upload_license": "Hayyama daldalaa fe'i",
     "doc_url_placeholder": "…yookaan URL ragaa maxxansi",
-    "save_changes": "Jijjiirama olkaa'i"
+    "save_changes": "Jijjiirama olkaa'i",
+    "compliance_section": "Gibira fi Bu'uura",
+    "compliance_desc": "Nagahee elektirooniksii Ministeera Galii barbaachisa. Yoo hin galmeeffamne duwwaa dhiisi.",
+    "legal_name": "Maqaa daldalaa seeraa",
+    "legal_name_placeholder": "Akka hayyama daldalaa kee irratti mul'atu",
+    "tin": "TIN (Lakkoofsa Eenyummeessaa Gibiraa)",
+    "tin_placeholder": "TIN lakkoofsa 10",
+    "vat_number": "Lakkoofsa VAT (yoo jiraate)",
+    "vat_placeholder": "Lakkoofsa galmee VAT",
+    "business_license_no": "Lakkoofsa hayyama daldalaa",
+    "business_license_placeholder": "Lakkoofsa hayyamaa",
+    "business_region": "Naannoo",
+    "business_wereda": "Aanaa",
+    "business_subcity": "Aanaa magaalaa",
+    "business_house_no": "Lakkoofsa manaa",
+    "fiscal_provider": "Kennifataa tajaajila gibiraa",
+    "fiscal_provider_placeholder": "fkn Zoorya, MoR-kallattiin"
   },
 
   "wallet": {
