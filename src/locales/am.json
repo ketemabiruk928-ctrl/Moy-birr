@@ -121,7 +121,23 @@
     "view_license": "የአሁኑን ፈቃድ ይመልከቱ",
     "upload_license": "የንግድ ፈቃድ ጫን",
     "doc_url_placeholder": "…ወይም URL ይለጥፉ",
-    "save_changes": "ለውጦችን አስቀምጥ"
+    "save_changes": "ለውጦችን አስቀምጥ",
+    "compliance_section": "ታክስ እና ተገዢነት",
+    "compliance_desc": "ለገቢዎች ሚኒስቴር ኤሌክትሮኒክ ደረሰኝ ያስፈልጋል። ካልተመዘገቡ ባዶ ይተዉት።",
+    "legal_name": "ህጋዊ የንግድ ስም",
+    "legal_name_placeholder": "በንግድ ፈቃድዎ ላይ እንደሚታየው",
+    "tin": "TIN (የግብር ከፋይ መታወቂያ ቁጥር)",
+    "tin_placeholder": "10 አሃዝ TIN",
+    "vat_number": "የVAT ቁጥር (ካለ)",
+    "vat_placeholder": "የVAT ምዝገባ ቁጥር",
+    "business_license_no": "የንግድ ፈቃድ ቁጥር",
+    "business_license_placeholder": "የፈቃድ ቁጥር",
+    "business_region": "ክልል",
+    "business_wereda": "ወረዳ",
+    "business_subcity": "ክፍለ ከተማ",
+    "business_house_no": "የቤት ቁጥር",
+    "fiscal_provider": "የታክስ አገልግሎት ሰጪ",
+    "fiscal_provider_placeholder": "ለምሳሌ ዞሪያ፣ MoR-ቀጥታ"
   },
 
   "wallet": {
