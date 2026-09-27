@@ -121,7 +121,23 @@
     "view_license": "View current licence",
     "upload_license": "Upload trade licence",
     "doc_url_placeholder": "…or paste a document URL",
-    "save_changes": "Save changes"
+    "save_changes": "Save changes",
+    "compliance_section": "Tax & Compliance",
+    "compliance_desc": "Required for Ministry of Revenues electronic invoicing. Leave blank if not registered yet.",
+    "legal_name": "Legal business name",
+    "legal_name_placeholder": "As shown on your business license",
+    "tin": "TIN (Taxpayer Identification Number)",
+    "tin_placeholder": "10-digit TIN",
+    "vat_number": "VAT number (if applicable)",
+    "vat_placeholder": "VAT registration number",
+    "business_license_no": "Business license number",
+    "business_license_placeholder": "License number",
+    "business_region": "Region",
+    "business_wereda": "Wereda",
+    "business_subcity": "Subcity",
+    "business_house_no": "House number",
+    "fiscal_provider": "Fiscalization provider",
+    "fiscal_provider_placeholder": "e.g. Zoorya, MoR-direct"
   },
 
   "wallet": {
