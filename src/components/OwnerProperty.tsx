@@ -26,6 +26,15 @@ type Hotel = {
   total_beds?: number | null;
   venue_type?: string | null;
   has_rooms?: boolean | null;
+  legal_name?: string | null;
+  tin?: string | null;
+  vat_number?: string | null;
+  business_license_no?: string | null;
+  business_region?: string | null;
+  business_wereda?: string | null;
+  business_subcity?: string | null;
+  business_house_no?: string | null;
+  fiscal_provider?: string | null;
 };
 
 const VENUE_TYPES = [
@@ -59,6 +68,17 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
     hotel?.total_beds != null ? String(hotel.total_beds) : "",
   );
 
+  // Compliance fields
+  const [legalName, setLegalName] = useState(hotel?.legal_name ?? "");
+  const [tin, setTin] = useState(hotel?.tin ?? "");
+  const [vatNumber, setVatNumber] = useState(hotel?.vat_number ?? "");
+  const [businessLicenseNo, setBusinessLicenseNo] = useState(hotel?.business_license_no ?? "");
+  const [businessRegion, setBusinessRegion] = useState(hotel?.business_region ?? "");
+  const [businessWereda, setBusinessWereda] = useState(hotel?.business_wereda ?? "");
+  const [businessSubcity, setBusinessSubcity] = useState(hotel?.business_subcity ?? "");
+  const [businessHouseNo, setBusinessHouseNo] = useState(hotel?.business_house_no ?? "");
+  const [fiscalProvider, setFiscalProvider] = useState(hotel?.fiscal_provider ?? "");
+
   useEffect(() => {
     if (!hotel) return;
     setName(hotel.name);
@@ -71,6 +91,15 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
     setPriceFrom(String(hotel.price_from));
     setTradeLicenseUrl(hotel.trade_license_url ?? "");
     setTotalBeds(hotel.total_beds != null ? String(hotel.total_beds) : "");
+    setLegalName(hotel.legal_name ?? "");
+    setTin(hotel.tin ?? "");
+    setVatNumber(hotel.vat_number ?? "");
+    setBusinessLicenseNo(hotel.business_license_no ?? "");
+    setBusinessRegion(hotel.business_region ?? "");
+    setBusinessWereda(hotel.business_wereda ?? "");
+    setBusinessSubcity(hotel.business_subcity ?? "");
+    setBusinessHouseNo(hotel.business_house_no ?? "");
+    setFiscalProvider(hotel.fiscal_provider ?? "");
   }, [hotel]);
 
   const isRoomless = ROOMLESS.has(venueType);
@@ -89,6 +118,15 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
         _venue_type: venueType,
         _has_rooms: !isRoomless,
         _total_beds: isRoomless ? null : totalBeds ? Number(totalBeds) : null,
+        _legal_name: legalName || null,
+        _tin: tin || null,
+        _vat_number: vatNumber || null,
+        _business_license_no: businessLicenseNo || null,
+        _business_region: businessRegion || null,
+        _business_wereda: businessWereda || null,
+        _business_subcity: businessSubcity || null,
+        _business_house_no: businessHouseNo || null,
+        _fiscal_provider: fiscalProvider || null,
       });
       if (error) throw error;
     },
@@ -263,6 +301,107 @@ export function PropertyForm({ hotel }: { hotel: Hotel | null }) {
           onChange={(e) => setTradeLicenseUrl(e.target.value)}
           placeholder={t("property.doc_url_placeholder")}
         />
+      </div>
+
+      {/* ─── COMPLIANCE SECTION ─── */}
+      <div className="mt-4 rounded-xl border border-primary/20 bg-accent/30 p-3">
+        <p className="text-sm font-semibold text-primary">
+          🏛️ {t("property.compliance_section")}
+        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          {t("property.compliance_desc")}
+        </p>
+
+        <div className="mt-3 space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="legalName">{t("property.legal_name")}</Label>
+            <Input
+              id="legalName"
+              value={legalName}
+              onChange={(e) => setLegalName(e.target.value)}
+              placeholder={t("property.legal_name_placeholder")}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="tin">{t("property.tin")}</Label>
+            <Input
+              id="tin"
+              value={tin}
+              onChange={(e) => setTin(e.target.value)}
+              placeholder={t("property.tin_placeholder")}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="vat">{t("property.vat_number")}</Label>
+            <Input
+              id="vat"
+              value={vatNumber}
+              onChange={(e) => setVatNumber(e.target.value)}
+              placeholder={t("property.vat_placeholder")}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="bizlic">{t("property.business_license_no")}</Label>
+            <Input
+              id="bizlic"
+              value={businessLicenseNo}
+              onChange={(e) => setBusinessLicenseNo(e.target.value)}
+              placeholder={t("property.business_license_placeholder")}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="br">{t("property.business_region")}</Label>
+              <Input
+                id="br"
+                value={businessRegion}
+                onChange={(e) => setBusinessRegion(e.target.value)}
+                placeholder="Addis Ababa"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bw">{t("property.business_wereda")}</Label>
+              <Input
+                id="bw"
+                value={businessWereda}
+                onChange={(e) => setBusinessWereda(e.target.value)}
+                placeholder="03"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bs">{t("property.business_subcity")}</Label>
+              <Input
+                id="bs"
+                value={businessSubcity}
+                onChange={(e) => setBusinessSubcity(e.target.value)}
+                placeholder="Bole"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bhn">{t("property.business_house_no")}</Label>
+              <Input
+                id="bhn"
+                value={businessHouseNo}
+                onChange={(e) => setBusinessHouseNo(e.target.value)}
+                placeholder="123"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="fp">{t("property.fiscal_provider")}</Label>
+            <Input
+              id="fp"
+              value={fiscalProvider}
+              onChange={(e) => setFiscalProvider(e.target.value)}
+              placeholder={t("property.fiscal_provider_placeholder")}
+            />
+          </div>
+        </div>
       </div>
 
       <Button
