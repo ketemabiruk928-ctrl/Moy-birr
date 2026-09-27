@@ -121,7 +121,23 @@
     "view_license": "عرض الرخصة الحالية",
     "upload_license": "تحميل الرخصة",
     "doc_url_placeholder": "…أو الصق رابط مستند",
-    "save_changes": "حفظ التغييرات"
+    "save_changes": "حفظ التغييرات",
+    "compliance_section": "الضرائب والامتثال",
+    "compliance_desc": "مطلوب للفاتورة الإلكترونية لوزارة الإيرادات. اتركه فارغاً إذا لم تكن مسجلاً بعد.",
+    "legal_name": "الاسم القانوني للشركة",
+    "legal_name_placeholder": "كما هو مذكور في رخصة عملك",
+    "tin": "رقم التعريف الضريبي (TIN)",
+    "tin_placeholder": "رقم TIN من 10 أرقام",
+    "vat_number": "رقم ضريبة القيمة المضافة (إن وجد)",
+    "vat_placeholder": "رقم تسجيل ضريبة القيمة المضافة",
+    "business_license_no": "رقم الرخصة التجارية",
+    "business_license_placeholder": "رقم الرخصة",
+    "business_region": "المنطقة",
+    "business_wereda": "الحي",
+    "business_subcity": "المنطقة الفرعية",
+    "business_house_no": "رقم المنزل",
+    "fiscal_provider": "مزود الفاتورة الضريبية",
+    "fiscal_provider_placeholder": "مثل زوريا، MoR-direct"
   },
 
   "wallet": {
