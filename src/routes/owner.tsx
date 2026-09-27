@@ -19,6 +19,7 @@ import { PropertyForm, RoomsManager, ShowcaseManager } from "@/components/OwnerP
 import { TipQr } from "@/components/TipQr";
 import { OwnerFeedbackInbox } from "@/components/OwnerFeedbackInbox";
 import { OwnerPerformance } from "@/components/OwnerPerformance";
+import { ComplianceDashboard } from "@/components/ComplianceDashboard";
 import { TeamChat } from "@/components/TeamChat";
 import { TeamMeetings } from "@/components/TeamMeetings";
 
@@ -249,7 +250,9 @@ function OwnerPage() {
 
   const confirmed = (bookings.data ?? []).filter((b) => b.status === "confirmed");
   const roomRevenue = confirmed.reduce((s, b) => s + Number(b.total), 0);
-  const occupancy = confirmed.filter((b) => new Date(b.check_out) >= new Date()).length;
+  const occupancy = confirmed.filter(
+    (b) => new Date(b.check_out) >= new Date(),
+  ).length;
 
   return (
     <>
@@ -283,7 +286,11 @@ function OwnerPage() {
             </p>
           </div>
           {!premiumActive && !plan.isLoading ? (
-            <Button size="sm" disabled={subscribe.isPending} onClick={() => subscribe.mutate()}>
+            <Button
+              size="sm"
+              disabled={subscribe.isPending}
+              onClick={() => subscribe.mutate()}
+            >
               {subscribe.isPending ? t("paying") : t("owner_dashboard.pay_subscription")}
             </Button>
           ) : premiumActive ? (
@@ -352,6 +359,9 @@ function OwnerPage() {
             <TabsTrigger value="jobs" disabled={!hotelId}>
               {t("owner_dashboard.tab_jobs")}
             </TabsTrigger>
+            <TabsTrigger value="compliance" disabled={!hotelId}>
+              {t("owner_dashboard.tab_compliance")}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="property" className="mt-3 space-y-3">
@@ -408,7 +418,9 @@ function OwnerPage() {
 
           <TabsContent value="staff" className="mt-3 space-y-3">
             <Card className="shadow-card p-4">
-              <p className="text-xs text-muted-foreground">{t("hotel_service_rating")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("hotel_service_rating")}
+              </p>
               <p className="mt-1 text-2xl font-bold">
                 {Number(hotel.data?.rating ?? 0) > 0
                   ? Number(hotel.data?.rating).toFixed(1)
@@ -424,7 +436,9 @@ function OwnerPage() {
                 <p className="text-sm font-semibold">
                   {t("waiting_approval")} ({pendingStaff.length})
                 </p>
-                <p className="text-xs text-muted-foreground">{t("pending_staff_hint")}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("pending_staff_hint")}
+                </p>
                 {pendingStaff.map((s) => (
                   <Card
                     key={s.staff_profile_id}
@@ -433,7 +447,9 @@ function OwnerPage() {
                     <p className="text-sm font-semibold">
                       {s.full_name || t("staff_member")}
                     </p>
-                    <p className="text-xs capitalize text-muted-foreground">{s.position}</p>
+                    <p className="text-xs capitalize text-muted-foreground">
+                      {s.position}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {[s.phone, s.moybirr_id].filter(Boolean).join(" · ")}
                     </p>
@@ -543,7 +559,9 @@ function OwnerPage() {
                       </p>
                     </div>
                     {r.comment ? (
-                      <p className="mt-1 text-sm text-muted-foreground">{r.comment}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {r.comment}
+                      </p>
                     ) : null}
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       {new Date(r.created_at).toLocaleString()}
@@ -578,7 +596,8 @@ function OwnerPage() {
               <Empty text={t("jobs_page.no_vacancies")} />
             ) : (
               (myJobs.data ?? []).map((j) => {
-                const apps = (j.job_applications as { id: string }[] | null) ?? [];
+                const apps =
+                  (j.job_applications as { id: string }[] | null) ?? [];
                 return (
                   <Card key={j.id} className="shadow-card space-y-1 p-4">
                     <div className="flex items-center justify-between">
@@ -589,7 +608,9 @@ function OwnerPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {j.location}
-                      {j.salary ? ` · ${formatETB(j.salary)} / ${t("month")}` : ""}
+                      {j.salary
+                        ? ` · ${formatETB(j.salary)} / ${t("month")}`
+                        : ""}
                     </p>
 
                     <ApplicantDialog jobId={j.id} jobTitle={j.title} />
@@ -597,6 +618,10 @@ function OwnerPage() {
                 );
               })
             )}
+          </TabsContent>
+
+          <TabsContent value="compliance" className="mt-3">
+            {hotelId ? <ComplianceDashboard hotelId={hotelId} /> : null}
           </TabsContent>
         </Tabs>
       </div>
@@ -632,7 +657,13 @@ function Empty({ text }: { text: string }) {
   );
 }
 
-function ApplicantDialog({ jobId, jobTitle }: { jobId: string; jobTitle: string }) {
+function ApplicantDialog({
+  jobId,
+  jobTitle,
+}: {
+  jobId: string;
+  jobTitle: string;
+}) {
   const { t } = useLang();
   const [open, setOpen] = useState(false);
 
@@ -666,7 +697,9 @@ function ApplicantDialog({ jobId, jobTitle }: { jobId: string; jobTitle: string 
 
         <div className="space-y-3 py-4">
           {applicants.isLoading ? (
-            <p className="text-center text-sm text-muted-foreground">{t("loading")}</p>
+            <p className="text-center text-sm text-muted-foreground">
+              {t("loading")}
+            </p>
           ) : (applicants.data ?? []).length === 0 ? (
             <p className="text-center text-sm text-muted-foreground">
               {t("jobs_page.no_applicants")}
