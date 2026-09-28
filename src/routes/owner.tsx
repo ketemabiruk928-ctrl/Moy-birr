@@ -20,6 +20,7 @@ import { TipQr } from "@/components/TipQr";
 import { OwnerFeedbackInbox } from "@/components/OwnerFeedbackInbox";
 import { OwnerPerformance } from "@/components/OwnerPerformance";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
+import { PayrollManager } from "@/components/PayrollManager";
 import { TeamChat } from "@/components/TeamChat";
 import { TeamMeetings } from "@/components/TeamMeetings";
 
@@ -362,6 +363,9 @@ function OwnerPage() {
             <TabsTrigger value="compliance" disabled={!hotelId}>
               {t("owner_dashboard.tab_compliance")}
             </TabsTrigger>
+            <TabsTrigger value="payroll" disabled={!hotelId}>
+              {t("owner_dashboard.tab_payroll")}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="property" className="mt-3 space-y-3">
@@ -622,6 +626,10 @@ function OwnerPage() {
 
           <TabsContent value="compliance" className="mt-3">
             {hotelId ? <ComplianceDashboard hotelId={hotelId} /> : null}
+          </TabsContent>
+
+          <TabsContent value="payroll" className="mt-3">
+            {hotelId ? <PayrollManager hotelId={hotelId} /> : null}
           </TabsContent>
         </Tabs>
       </div>
