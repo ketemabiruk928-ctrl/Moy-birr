@@ -10,6 +10,7 @@ import { AppHeader, AppShell, RequireAuth } from "@/components/AppShell";
 import { MediaImg, UploadButton } from "@/components/Media";
 import { TeamChat } from "@/components/TeamChat";
 import { TeamMeetings } from "@/components/TeamMeetings";
+import { StaffShifts } from "@/components/StaffShifts";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -497,6 +498,19 @@ function ProfilePage() {
                 {t("profile_page.ratings")}
               </p>
             ) : null}
+          </Card>
+        ) : null}
+
+        {/* My Shifts & Payslips — for approved staff */}
+        {role === "staff" && employment === "active" ? (
+          <Card className="shadow-card space-y-3 p-5">
+            <div>
+              <p className="text-sm font-semibold">{t("payroll.my_shifts")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("payroll.my_shifts_desc")}
+              </p>
+            </div>
+            <StaffShifts />
           </Card>
         ) : null}
 
