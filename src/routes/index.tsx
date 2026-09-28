@@ -32,6 +32,9 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 
+// STEP 1: Import the PayrollReport component here
+import { PayrollReport } from "@/components/PayrollReport";
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -111,7 +114,6 @@ function Wallet() {
     void qc.invalidateQueries({ queryKey: ["transactions"] });
   };
 
-  // Build transaction type labels from translations
   const typeMeta: Record<string, { label: string; icon: typeof Send; tone: string }> = {
     deposit: { label: t("tx.deposit"), icon: ArrowDownLeft, tone: "text-success" },
     withdraw: { label: t("tx.withdraw"), icon: ArrowUpRight, tone: "text-destructive" },
@@ -236,6 +238,11 @@ function Wallet() {
               })
             )}
           </Card>
+        </div>
+
+        {/* STEP 2: Payroll Report is added here at the bottom of the wallet page */}
+        <div className="mt-8">
+          <PayrollReport />
         </div>
       </div>
     </>
