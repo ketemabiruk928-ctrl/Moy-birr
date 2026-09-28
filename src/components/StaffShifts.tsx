@@ -5,11 +5,9 @@ import {
   CalendarClock,
   LogIn,
   LogOut,
-  Clock,
   CheckCircle2,
   Loader2,
   FileText,
-  DollarSign,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLang, formatETB } from "@/lib/i18n";
@@ -100,7 +98,6 @@ function MyShiftsList() {
 
   const clockIn = useMutation({
     mutationFn: async (shiftId: string) => {
-      // Try to get GPS
       let lat: number | null = null;
       let lng: number | null = null;
       try {
@@ -185,8 +182,8 @@ function MyShiftsList() {
         const canClockIn =
           !s.clocked_in_at &&
           isToday &&
-          now >= new Date(shiftStart.getTime() - 30 * 60 * 1000) && // 30 min early
-          now <= new Date(shiftStart.getTime() + 4 * 60 * 60 * 1000); // 4hr late limit
+          now >= new Date(shiftStart.getTime() - 30 * 60 * 1000) &&
+          now <= new Date(shiftStart.getTime() + 4 * 60 * 60 * 1000);
 
         return (
           <Card key={s.id} className="shadow-card space-y-3 p-4">
@@ -231,7 +228,6 @@ function MyShiftsList() {
               </Badge>
             </div>
 
-            {/* Action buttons */}
             {canClockIn ? (
               <Button
                 className="w-full"
@@ -270,7 +266,7 @@ function MyShiftsList() {
 }
 
 /* ============================================================
- * MY PAYSLIPS
+ * MY PAYSLIPS (NO TIPS SHOWN)
  * ============================================================ */
 function MyPayslips() {
   const { t } = useLang();
@@ -329,18 +325,13 @@ function MyPayslips() {
             </Badge>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 text-xs">
+          {/* 3 cards: Base Salary, Hours, Shifts (NO TIPS) */}
+          <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="rounded-lg bg-muted p-2">
               <p className="text-[10px] text-muted-foreground">
                 {t("payroll.base_salary")}
               </p>
               <p className="font-semibold">{formatETB(p.base_salary)}</p>
-            </div>
-            <div className="rounded-lg bg-muted p-2">
-              <p className="text-[10px] text-muted-foreground">
-                {t("payroll.tips")}
-              </p>
-              <p className="font-semibold">{formatETB(p.tips_earned)}</p>
             </div>
             <div className="rounded-lg bg-muted p-2">
               <p className="text-[10px] text-muted-foreground">
