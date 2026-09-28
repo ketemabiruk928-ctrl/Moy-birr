@@ -191,7 +191,6 @@ function ShiftScheduler({ hotelId }: { hotelId: string }) {
       setStaffId("");
       setRole("");
       setNotes("");
-      // Invalidate all shift queries for this hotel
       void qc.invalidateQueries({ queryKey: ["owner-shifts"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -485,7 +484,7 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
 }
 
 /* ============================================================
- * PAYSLIPS VIEW
+ * PAYSLIPS VIEW (NO TIPS)
  * ============================================================ */
 function PayslipsView({ hotelId }: { hotelId: string }) {
   const { t } = useLang();
@@ -597,18 +596,13 @@ function PayslipsView({ hotelId }: { hotelId: string }) {
               </Badge>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            {/* 3 cards: Base, Hours, Shifts (NO TIPS CARD) */}
+            <div className="grid grid-cols-3 gap-2 text-xs">
               <div className="rounded-lg bg-muted p-2">
                 <p className="text-[10px] text-muted-foreground">
                   {t("payroll.base_salary")}
                 </p>
                 <p className="font-semibold">{formatETB(p.base_salary)}</p>
-              </div>
-              <div className="rounded-lg bg-muted p-2">
-                <p className="text-[10px] text-muted-foreground">
-                  {t("payroll.tips")}
-                </p>
-                <p className="font-semibold">{formatETB(p.tips_earned)}</p>
               </div>
               <div className="rounded-lg bg-muted p-2">
                 <p className="text-[10px] text-muted-foreground">
