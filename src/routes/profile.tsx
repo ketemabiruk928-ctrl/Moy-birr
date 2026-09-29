@@ -10,8 +10,8 @@ import { AppHeader, AppShell, RequireAuth } from "@/components/AppShell";
 import { MediaImg, UploadButton } from "@/components/Media";
 import { TeamChat } from "@/components/TeamChat";
 import { TeamMeetings } from "@/components/TeamMeetings";
-import { StaffShifts } from "@/components/StaffShifts";
 import { StaffClockInOut } from "@/components/StaffClockInOut";
+import { StaffUpcomingShifts } from "@/components/StaffUpcomingShifts";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -512,7 +512,7 @@ function ProfilePage() {
               </p>
             </div>
             <StaffClockInOut />
-            <StaffShifts />
+            <StaffUpcomingShifts />
           </Card>
         ) : null}
 
