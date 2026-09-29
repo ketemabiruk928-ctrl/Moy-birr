@@ -56,20 +56,6 @@ type Shift = {
   hours_worked: number | null;
 };
 
-type AttendanceRecord = {
-  id: number;
-  staff_id: number;
-  clock_in: string;
-  clock_out: string | null;
-  total_minutes: number | null;
-  status: string;
-  staff: {
-    full_name: string;
-    employee_code: string;
-    position: string | null;
-  };
-};
-
 type StaffRow = {
   id: number;
   employee_code: string;
@@ -573,7 +559,7 @@ function ShiftScheduler({ hotelId }: { hotelId: string }) {
 }
 
 /* ============================================================
- * ATTENDANCE VIEW (reads from staff_attendance)
+ * ATTENDANCE VIEW (fixed — no nested joins, won't hang)
  * ============================================================ */
 function AttendanceView({ hotelId }: { hotelId: string }) {
   const { t } = useLang();
@@ -586,39 +572,44 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
   const attendance = useQuery({
     queryKey: ["owner-attendance-new", hotelId, fromDate, toDate],
     queryFn: async () => {
-      // 1. Get all staff ids for this hotel
+      // Step 1: get staff ids for this hotel
       const { data: staffData, error: staffErr } = await supabase
         .from("staff")
-        .select("id")
-        .eq("hotel_id", hotelId);
+        .select("id, full_name, employee_code, position")
+        .eq("hotel_id", hotelId)
+        .eq("active", true);
       if (staffErr) throw staffErr;
 
-      const staffIds = (staffData ?? []).map((s) => s.id);
-      if (staffIds.length === 0) return [] as AttendanceRecord[];
+      const staffMap = new Map((staffData ?? []).map((s) => [s.id, s]));
+      const staffIds = Array.from(staffMap.keys());
+      if (staffIds.length === 0) return [];
 
-      // 2. Get attendance records for those staff
-      const { data, error } = await supabase
+      // Step 2: get attendance records
+      const { data: attData, error: attErr } = await supabase
         .from("staff_attendance")
-        .select(
-          `
-          id,
-          staff_id,
-          clock_in,
-          clock_out,
-          total_minutes,
-          status,
-          staff ( full_name, employee_code, position )
-        `,
-        )
+        .select("id, staff_id, clock_in, clock_out, total_minutes, status")
         .in("staff_id", staffIds)
         .gte("clock_in", fromDate)
         .lte("clock_in", toDate)
-        .order("clock_in", { ascending: false });
+        .order("clock_in", { ascending: false })
+        .limit(100);
+      if (attErr) throw attErr;
 
-      if (error) throw error;
-      return (data ?? []) as unknown as AttendanceRecord[];
+      // Step 3: attach staff info in JS
+      return (attData ?? []).map((a) => ({
+        ...a,
+        staff: staffMap.get(a.staff_id) ?? null,
+      }));
     },
   });
+
+  if (attendance.isError) {
+    return (
+      <Card className="shadow-card p-4 text-sm text-destructive">
+        Error: {(attendance.error as Error).message}
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -632,11 +623,15 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => qc.invalidateQueries({ queryKey: ["owner-attendance-new"] })}
+          onClick={() =>
+            qc.invalidateQueries({ queryKey: ["owner-attendance-new"] })
+          }
           disabled={attendance.isFetching}
         >
           <RefreshCw
-            className={`size-3.5 ${attendance.isFetching ? "animate-spin" : ""}`}
+            className={`size-3.5 ${
+              attendance.isFetching ? "animate-spin" : ""
+            }`}
           />
         </Button>
       </Card>
@@ -644,6 +639,7 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
       {attendance.isLoading ? (
         <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
           <Loader2 className="mx-auto size-5 animate-spin" />
+          <p className="mt-2">Loading attendance…</p>
         </Card>
       ) : (attendance.data ?? []).length === 0 ? (
         <Card className="shadow-card flex flex-col items-center gap-2 p-6 text-center">
@@ -651,9 +647,12 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
           <p className="text-sm text-muted-foreground">
             No attendance records yet.
           </p>
+          <p className="text-xs text-muted-foreground">
+            Staff must clock in from their profile page.
+          </p>
         </Card>
       ) : (
-        (attendance.data ?? []).map((a) => {
+        (attendance.data ?? []).map((a: any) => {
           const isActive = a.clock_in && !a.clock_out;
           const clockIn = new Date(a.clock_in);
           const hours = a.total_minutes
@@ -664,7 +663,7 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold">
-                    {a.staff?.full_name || t("staff_member")}
+                    {a.staff?.full_name || "Unknown staff"}
                   </p>
                   <p className="text-xs capitalize text-muted-foreground">
                     {a.staff?.position || "staff"} · {a.staff?.employee_code}
@@ -695,13 +694,6 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
                       {hours ?? "—"}h
                     </Badge>
                   )}
-                  <p
-                    className={`mt-1 text-[10px] capitalize ${
-                      a.status === "open" ? "text-success" : "text-muted-foreground"
-                    }`}
-                  >
-                    {a.status}
-                  </p>
                 </div>
               </div>
             </Card>
