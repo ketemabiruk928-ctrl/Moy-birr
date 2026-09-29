@@ -11,6 +11,7 @@ import { MediaImg, UploadButton } from "@/components/Media";
 import { TeamChat } from "@/components/TeamChat";
 import { TeamMeetings } from "@/components/TeamMeetings";
 import { StaffShifts } from "@/components/StaffShifts";
+import { StaffClockInOut } from "@/components/StaffClockInOut";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -510,6 +511,7 @@ function ProfilePage() {
                 {t("payroll.my_shifts_desc")}
               </p>
             </div>
+            <StaffClockInOut />
             <StaffShifts />
           </Card>
         ) : null}
