@@ -8,7 +8,6 @@ import {
   Clock,
   DollarSign,
   Loader2,
-  CheckCircle2,
   Users,
   RefreshCw,
   UserCircle,
@@ -33,29 +32,6 @@ import { PayrollReport } from "@/components/PayrollReport";
 import { AddStaffDialog } from "@/components/AddStaffDialog";
 import { SetSalaryDialog } from "@/components/SetSalaryDialog";
 
-type StaffOption = {
-  staff_profile_id: string;
-  full_name: string | null;
-  position: string | null;
-  employment_status?: string;
-};
-
-type Shift = {
-  id: string;
-  staff_profile_id: string;
-  staff_name: string | null;
-  job_position: string | null;
-  shift_date: string;
-  start_time: string;
-  end_time: string;
-  role: string | null;
-  status: string;
-  notes: string | null;
-  clocked_in_at: string | null;
-  clocked_out_at: string | null;
-  hours_worked: number | null;
-};
-
 type StaffRow = {
   id: number;
   employee_code: string;
@@ -75,6 +51,17 @@ type StaffRow = {
   } | null;
 };
 
+type ShiftRow = {
+  id: number;
+  staff_id: number;
+  shift_date: string;
+  start_time: string;
+  end_time: string;
+  role: string | null;
+  notes: string | null;
+  status: string;
+};
+
 export function PayrollManager({ hotelId }: { hotelId: string }) {
   const { t } = useLang();
   const [tab, setTab] = useState<"shifts" | "staff" | "attendance" | "payroll">(
@@ -91,7 +78,7 @@ export function PayrollManager({ hotelId }: { hotelId: string }) {
           className="shrink-0"
         >
           <CalendarClock className="mr-2 size-4" />
-          {t("payroll.shifts_title")}
+          Shift Scheduler
         </Button>
         <Button
           size="sm"
@@ -109,7 +96,7 @@ export function PayrollManager({ hotelId }: { hotelId: string }) {
           className="shrink-0"
         >
           <Clock className="mr-2 size-4" />
-          {t("payroll.attendance_title")}
+          Attendance
         </Button>
         <Button
           size="sm"
@@ -118,7 +105,7 @@ export function PayrollManager({ hotelId }: { hotelId: string }) {
           className="shrink-0"
         >
           <DollarSign className="mr-2 size-4" />
-          {t("payroll.payroll_title")}
+          Payroll
         </Button>
       </div>
 
@@ -131,23 +118,304 @@ export function PayrollManager({ hotelId }: { hotelId: string }) {
 }
 
 /* ============================================================
+ * SHIFT SCHEDULER — reads from staff_shifts
+ * ============================================================ */
+function ShiftScheduler({ hotelId }: { hotelId: string }) {
+  const { t } = useLang();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const [staffId, setStaffId] = useState("");
+  const [shiftDate, setShiftDate] = useState(today);
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("17:00");
+  const [role, setRole] = useState("");
+  const [notes, setNotes] = useState("");
+
+  // Active staff for this hotel
+  const staff = useQuery({
+    queryKey: ["hotel-staff", hotelId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("staff")
+        .select("id, full_name, position, employee_code")
+        .eq("hotel_id", hotelId)
+        .eq("active", true)
+        .order("full_name");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // All shifts for the next 60 days
+  const shifts = useQuery({
+    queryKey: ["hotel-shifts", hotelId],
+    queryFn: async () => {
+      const from = new Date(Date.now() - 30 * 86400000)
+        .toISOString()
+        .slice(0, 10);
+      const to = new Date(Date.now() + 60 * 86400000)
+        .toISOString()
+        .slice(0, 10);
+
+      const { data, error } = await supabase
+        .from("staff_shifts")
+        .select(
+          "id, staff_id, shift_date, start_time, end_time, role, notes, status",
+        )
+        .eq("hotel_id", hotelId)
+        .gte("shift_date", from)
+        .lte("shift_date", to)
+        .order("shift_date", { ascending: false })
+        .order("start_time", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Merge staff names into shifts
+  const staffMap = useMemo(() => {
+    const map = new Map<number, { name: string; position: string | null }>();
+    (staff.data ?? []).forEach((s) => {
+      map.set(s.id, {
+        name: s.full_name || "Staff",
+        position: s.position,
+      });
+    });
+    return map;
+  }, [staff.data]);
+
+  const createShift = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("staff_shifts").insert({
+        staff_id: Number(staffId),
+        hotel_id: hotelId,
+        shift_date: shiftDate,
+        start_time: startTime,
+        end_time: endTime,
+        role: role || null,
+        notes: notes || null,
+        status: "scheduled",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Shift scheduled");
+      setOpen(false);
+      setStaffId("");
+      setRole("");
+      setNotes("");
+      void qc.invalidateQueries({ queryKey: ["hotel-shifts", hotelId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteShift = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await supabase
+        .from("staff_shifts")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Shift deleted");
+      void qc.invalidateQueries({ queryKey: ["hotel-shifts", hotelId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const todayStr = today;
+
+  return (
+    <div className="space-y-3">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button className="w-full">
+            <Plus className="mr-2 size-4" />
+            New Shift
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Schedule a Shift</DialogTitle>
+            <DialogDescription>
+              Assign a shift to a staff member.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Staff Member</Label>
+              <select
+                value={staffId}
+                onChange={(e) => setStaffId(e.target.value)}
+                className="w-full rounded-md border border-border bg-background p-2 text-sm"
+              >
+                <option value="">Select staff…</option>
+                {(staff.data ?? []).map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.full_name} · {s.position || "staff"}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={shiftDate}
+                onChange={(e) => setShiftDate(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Start Time</Label>
+                <Input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>End Time</Label>
+                <Input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Role (optional)</Label>
+              <Input
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                placeholder="waiter, reception…"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Notes (optional)</Label>
+              <Input
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+
+            <Button
+              className="w-full"
+              disabled={!staffId || !shiftDate || createShift.isPending}
+              onClick={() => createShift.mutate()}
+            >
+              {createShift.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                "Schedule Shift"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Card className="shadow-card flex items-center justify-between p-3">
+        <p className="text-xs text-muted-foreground">
+          {(shifts.data ?? []).length} shift
+          {(shifts.data ?? []).length === 1 ? "" : "s"}
+        </p>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => shifts.refetch()}
+          disabled={shifts.isFetching}
+        >
+          <RefreshCw
+            className={`size-3.5 ${shifts.isFetching ? "animate-spin" : ""}`}
+          />
+        </Button>
+      </Card>
+
+      {shifts.isLoading ? (
+        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
+          <Loader2 className="mx-auto size-5 animate-spin" />
+        </Card>
+      ) : (shifts.data ?? []).length === 0 ? (
+        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
+          No shifts scheduled yet.
+        </Card>
+      ) : (
+        (shifts.data ?? []).map((s) => {
+          const info = staffMap.get(s.staff_id);
+          const isToday = s.shift_date === todayStr;
+          return (
+            <Card key={s.id} className="shadow-card space-y-2 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-2 text-sm font-semibold">
+                    {info?.name || "Unknown"}
+                    {isToday ? (
+                      <Badge variant="default" className="text-[10px]">
+                        TODAY
+                      </Badge>
+                    ) : null}
+                  </p>
+                  <p className="text-xs capitalize text-muted-foreground">
+                    {info?.position || s.role || "staff"}
+                  </p>
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                    <CalendarClock className="size-3" />
+                    {s.shift_date} · {s.start_time?.slice(0, 5)} →{" "}
+                    {s.end_time?.slice(0, 5)}
+                  </p>
+                  {s.notes ? (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {s.notes}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <Badge variant="secondary" className="capitalize text-[10px]">
+                    {s.status}
+                  </Badge>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    disabled={deleteShift.isPending}
+                    onClick={() => deleteShift.mutate(s.id)}
+                  >
+                    <Trash2 className="size-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
  * STAFF VIEW
  * ============================================================ */
 function StaffView({ hotelId }: { hotelId: string }) {
   const qc = useQueryClient();
 
   const staff = useQuery({
-    queryKey: ["hotel-staff", hotelId],
+    queryKey: ["hotel-staff-full", hotelId],
     queryFn: async () => {
       const { data: staffData, error: staffErr } = await supabase
         .from("staff")
         .select(
-          "id, employee_code, full_name, email, phone, position, active, hired_at, hotel_id",
+          "id, employee_code, full_name, email, phone, position, active, hired_at",
         )
         .eq("hotel_id", hotelId)
         .eq("active", true)
         .order("created_at", { ascending: false });
-
       if (staffErr) throw staffErr;
       if (!staffData || staffData.length === 0) return [] as StaffRow[];
 
@@ -159,26 +427,20 @@ function StaffView({ hotelId }: { hotelId: string }) {
         )
         .in("staff_id", staffIds)
         .order("effective_from", { ascending: false });
-
       if (salErr) throw salErr;
 
-      const merged: StaffRow[] = staffData.map((s) => {
-        const latest =
-          (salaryData ?? []).find((sal) => sal.staff_id === s.id) ?? null;
-        return {
-          id: s.id,
-          employee_code: s.employee_code,
-          full_name: s.full_name || "New Staff",
-          email: s.email,
-          phone: s.phone,
-          position: s.position,
-          active: s.active,
-          hired_at: s.hired_at,
-          latest_salary: latest,
-        };
-      });
-
-      return merged;
+      return staffData.map((s) => ({
+        id: s.id,
+        employee_code: s.employee_code,
+        full_name: s.full_name || "New Staff",
+        email: s.email,
+        phone: s.phone,
+        position: s.position,
+        active: s.active,
+        hired_at: s.hired_at,
+        latest_salary:
+          (salaryData ?? []).find((sal) => sal.staff_id === s.id) ?? null,
+      })) as StaffRow[];
     },
   });
 
@@ -192,7 +454,7 @@ function StaffView({ hotelId }: { hotelId: string }) {
     },
     onSuccess: () => {
       toast.success("Staff member removed");
-      void qc.invalidateQueries({ queryKey: ["hotel-staff", hotelId] });
+      void qc.invalidateQueries({ queryKey: ["hotel-staff-full", hotelId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -226,7 +488,7 @@ function StaffView({ hotelId }: { hotelId: string }) {
         <Card className="shadow-card flex flex-col items-center gap-2 p-6 text-center">
           <Users className="size-7 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            No staff yet. Tap "Add Staff Member" to get started.
+            No staff yet. Tap "Add Staff Member".
           </p>
         </Card>
       ) : (
@@ -314,266 +576,11 @@ function StaffView({ hotelId }: { hotelId: string }) {
 }
 
 /* ============================================================
- * SHIFT SCHEDULER (fixed date loop)
- * ============================================================ */
-function ShiftScheduler({ hotelId }: { hotelId: string }) {
-  const { t } = useLang();
-  const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
-
-  // FIXED: use useMemo so dates don't change every render
-  const { today, fromDate, toDate } = useMemo(() => {
-    const now = new Date();
-    const future = new Date();
-    future.setDate(future.getDate() + 30);
-    return {
-      today: now.toISOString().slice(0, 10),
-      fromDate: now.toISOString().slice(0, 10),
-      toDate: future.toISOString().slice(0, 10),
-    };
-  }, []);
-
-  const [staffId, setStaffId] = useState("");
-  const [shiftDate, setShiftDate] = useState(today);
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("17:00");
-  const [role, setRole] = useState("");
-  const [notes, setNotes] = useState("");
-
-  const staff = useQuery({
-    queryKey: ["owner-staff-list", hotelId],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("owner_staff_list", {
-        _hotel_id: hotelId,
-      });
-      if (error) throw error;
-      return (data ?? []) as StaffOption[];
-    },
-  });
-
-  const activeStaff = (staff.data ?? []).filter(
-    (s) => s.employment_status === "active",
-  );
-
-  const shifts = useQuery({
-    queryKey: ["owner-shifts", hotelId, fromDate, toDate],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("list_shifts_for_hotel", {
-        _hotel_id: hotelId,
-        _from: fromDate,
-        _to: toDate,
-      });
-      if (error) throw error;
-      return (data ?? []) as Shift[];
-    },
-  });
-
-  const createShift = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.rpc("create_shift", {
-        _hotel_id: hotelId,
-        _staff_profile_id: staffId,
-        _shift_date: shiftDate,
-        _start_time: startTime,
-        _end_time: endTime,
-        _role: role || null,
-        _notes: notes || null,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success(t("payroll.shift_scheduled"));
-      setOpen(false);
-      setStaffId("");
-      setRole("");
-      setNotes("");
-      void qc.invalidateQueries({ queryKey: ["owner-shifts"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const deleteShift = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.rpc("delete_shift", { _shift_id: id });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success(t("payroll.shift_deleted"));
-      void qc.invalidateQueries({ queryKey: ["owner-shifts"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  return (
-    <div className="space-y-3">
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button className="w-full">
-            <Plus className="mr-2 size-4" />
-            {t("payroll.new_shift")}
-          </Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("payroll.new_shift")}</DialogTitle>
-            <DialogDescription>{t("payroll.shifts_desc")}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>{t("payroll.staff_label")}</Label>
-              <select
-                value={staffId}
-                onChange={(e) => setStaffId(e.target.value)}
-                className="w-full rounded-md border border-border bg-background p-2 text-sm"
-              >
-                <option value="">{t("payroll.select_staff")}</option>
-                {activeStaff.map((s) => (
-                  <option key={s.staff_profile_id} value={s.staff_profile_id}>
-                    {s.full_name || t("staff_member")} · {s.position || "staff"}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>{t("payroll.shift_date")}</Label>
-              <Input
-                type="date"
-                value={shiftDate}
-                onChange={(e) => setShiftDate(e.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>{t("payroll.start_time")}</Label>
-                <Input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t("payroll.end_time")}</Label>
-                <Input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>{t("payroll.role_optional")}</Label>
-              <Input
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                placeholder="waiter, reception…"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>{t("payroll.notes_optional")}</Label>
-              <Input
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </div>
-
-            <Button
-              className="w-full"
-              disabled={!staffId || !shiftDate || createShift.isPending}
-              onClick={() => createShift.mutate()}
-            >
-              {createShift.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                t("payroll.schedule_btn")
-              )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Card className="shadow-card flex items-center justify-between p-3">
-        <p className="text-xs text-muted-foreground">
-          {(shifts.data ?? []).length} {t("payroll.shifts_title").toLowerCase()}
-        </p>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => shifts.refetch()}
-          disabled={shifts.isFetching}
-        >
-          <RefreshCw
-            className={`size-3.5 ${shifts.isFetching ? "animate-spin" : ""}`}
-          />
-        </Button>
-      </Card>
-
-      {shifts.isLoading ? (
-        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-          <Loader2 className="mx-auto size-5 animate-spin" />
-        </Card>
-      ) : (shifts.data ?? []).length === 0 ? (
-        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-          {t("payroll.no_shifts")}
-        </Card>
-      ) : (
-        (shifts.data ?? []).map((s) => (
-          <Card key={s.id} className="shadow-card space-y-2 p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">
-                  {s.staff_name || t("staff_member")}
-                </p>
-                <p className="text-xs capitalize text-muted-foreground">
-                  {s.job_position || s.role || "staff"}
-                </p>
-                <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                  <CalendarClock className="size-3" />
-                  {s.shift_date} · {s.start_time?.slice(0, 5)} →{" "}
-                  {s.end_time?.slice(0, 5)}
-                </p>
-                {s.clocked_in_at ? (
-                  <p className="mt-1 flex items-center gap-1 text-[11px] text-success">
-                    <CheckCircle2 className="size-3" />
-                    {t("payroll.clocked_in")}
-                    {s.clocked_out_at
-                      ? ` → ${t("payroll.clocked_out")} (${s.hours_worked}h)`
-                      : ""}
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <Badge variant="secondary" className="capitalize text-[10px]">
-                  {t(`payroll.status_${s.status}`) || s.status}
-                </Badge>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  disabled={deleteShift.isPending}
-                  onClick={() => deleteShift.mutate(s.id)}
-                >
-                  <Trash2 className="size-4 text-destructive" />
-                </Button>
-              </div>
-            </div>
-          </Card>
-        ))
-      )}
-    </div>
-  );
-}
-
-/* ============================================================
- * ATTENDANCE VIEW (fixed date loop)
+ * ATTENDANCE VIEW
  * ============================================================ */
 function AttendanceView({ hotelId }: { hotelId: string }) {
-  const { t } = useLang();
   const qc = useQueryClient();
 
-  // FIXED: useMemo so the dates are stable across renders
   const { fromDate, toDate } = useMemo(() => {
     const end = new Date();
     const start = new Date();
@@ -587,7 +594,6 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
   const attendance = useQuery({
     queryKey: ["owner-attendance-new", hotelId, fromDate, toDate],
     queryFn: async () => {
-      // Step 1: get staff ids for this hotel
       const { data: staffData, error: staffErr } = await supabase
         .from("staff")
         .select("id, full_name, employee_code, position")
@@ -599,7 +605,6 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
       const staffIds = Array.from(staffMap.keys());
       if (staffIds.length === 0) return [];
 
-      // Step 2: get attendance records
       const { data: attData, error: attErr } = await supabase
         .from("staff_attendance")
         .select("id, staff_id, clock_in, clock_out, total_minutes, status")
@@ -610,7 +615,6 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
         .limit(100);
       if (attErr) throw attErr;
 
-      // Step 3: attach staff info in JS
       return (attData ?? []).map((a) => ({
         ...a,
         staff: staffMap.get(a.staff_id) ?? null,
@@ -618,21 +622,11 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
     },
   });
 
-  if (attendance.isError) {
-    return (
-      <Card className="shadow-card p-4 text-sm text-destructive">
-        Error: {(attendance.error as Error).message}
-      </Card>
-    );
-  }
-
   return (
     <div className="space-y-3">
       <Card className="shadow-card flex items-center justify-between p-3">
         <div>
-          <p className="text-sm font-semibold">
-            {t("payroll.attendance_title")}
-          </p>
+          <p className="text-sm font-semibold">Attendance</p>
           <p className="text-xs text-muted-foreground">Last 14 days</p>
         </div>
         <Button
@@ -654,16 +648,12 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
       {attendance.isLoading ? (
         <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
           <Loader2 className="mx-auto size-5 animate-spin" />
-          <p className="mt-2">Loading attendance…</p>
         </Card>
       ) : (attendance.data ?? []).length === 0 ? (
         <Card className="shadow-card flex flex-col items-center gap-2 p-6 text-center">
           <Users className="size-7 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
             No attendance records yet.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Staff must clock in from their profile page.
           </p>
         </Card>
       ) : (
@@ -678,7 +668,7 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold">
-                    {a.staff?.full_name || "Unknown staff"}
+                    {a.staff?.full_name || "Unknown"}
                   </p>
                   <p className="text-xs capitalize text-muted-foreground">
                     {a.staff?.position || "staff"} · {a.staff?.employee_code}
@@ -720,10 +710,9 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
 }
 
 /* ============================================================
- * PAYSLIPS VIEW (Ethiopian Tax System)
+ * PAYSLIPS VIEW
  * ============================================================ */
 function PayslipsView({ hotelId }: { hotelId: string }) {
-  const { t } = useLang();
   const qc = useQueryClient();
 
   const currentMonth = new Date().toISOString().slice(0, 7);
@@ -748,7 +737,6 @@ function PayslipsView({ hotelId }: { hotelId: string }) {
           .eq("end_date", endDate)
           .order("id", { ascending: true })
           .limit(1);
-
         if (findErr) throw findErr;
 
         if (existing && existing.length > 0) {
@@ -773,7 +761,6 @@ function PayslipsView({ hotelId }: { hotelId: string }) {
         setLoadingPeriod(false);
       }
     };
-
     findOrCreate();
   }, [month]);
 
@@ -797,7 +784,7 @@ function PayslipsView({ hotelId }: { hotelId: string }) {
     <div className="space-y-3">
       <Card className="shadow-card space-y-3 p-4">
         <div className="space-y-1.5">
-          <Label>{t("payroll.month") || "Month"}</Label>
+          <Label>Month</Label>
           <Input
             type="month"
             value={month}
@@ -814,7 +801,7 @@ function PayslipsView({ hotelId }: { hotelId: string }) {
           ) : (
             <DollarSign className="mr-2 size-4" />
           )}
-          {t("payroll.generate_payroll") || "Generate payslips"}
+          Generate payslips
         </Button>
         <p className="text-[11px] text-muted-foreground">
           Auto-calculate monthly salaries with Ethiopian income tax.
