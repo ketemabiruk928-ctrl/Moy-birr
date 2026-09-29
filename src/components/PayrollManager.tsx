@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -314,16 +314,24 @@ function StaffView({ hotelId }: { hotelId: string }) {
 }
 
 /* ============================================================
- * SHIFT SCHEDULER
+ * SHIFT SCHEDULER (fixed date loop)
  * ============================================================ */
 function ShiftScheduler({ hotelId }: { hotelId: string }) {
   const { t } = useLang();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const fromDate = today;
-  const toDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  // FIXED: use useMemo so dates don't change every render
+  const { today, fromDate, toDate } = useMemo(() => {
+    const now = new Date();
+    const future = new Date();
+    future.setDate(future.getDate() + 30);
+    return {
+      today: now.toISOString().slice(0, 10),
+      fromDate: now.toISOString().slice(0, 10),
+      toDate: future.toISOString().slice(0, 10),
+    };
+  }, []);
 
   const [staffId, setStaffId] = useState("");
   const [shiftDate, setShiftDate] = useState(today);
@@ -559,15 +567,22 @@ function ShiftScheduler({ hotelId }: { hotelId: string }) {
 }
 
 /* ============================================================
- * ATTENDANCE VIEW (fixed — no nested joins, won't hang)
+ * ATTENDANCE VIEW (fixed date loop)
  * ============================================================ */
 function AttendanceView({ hotelId }: { hotelId: string }) {
   const { t } = useLang();
   const qc = useQueryClient();
 
-  // Last 14 days
-  const fromDate = new Date(Date.now() - 14 * 86400000).toISOString();
-  const toDate = new Date().toISOString();
+  // FIXED: useMemo so the dates are stable across renders
+  const { fromDate, toDate } = useMemo(() => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 14);
+    return {
+      fromDate: start.toISOString(),
+      toDate: end.toISOString(),
+    };
+  }, []);
 
   const attendance = useQuery({
     queryKey: ["owner-attendance-new", hotelId, fromDate, toDate],
