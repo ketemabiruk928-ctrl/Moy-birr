@@ -32,9 +32,6 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 
-// STEP 1: Import the PayrollReport component here
-import { PayrollReport } from "@/components/PayrollReport";
-
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -238,11 +235,6 @@ function Wallet() {
               })
             )}
           </Card>
-        </div>
-
-        {/* STEP 2: Payroll Report is added here at the bottom of the wallet page */}
-        <div className="mt-8">
-          <PayrollReport />
         </div>
       </div>
     </>
