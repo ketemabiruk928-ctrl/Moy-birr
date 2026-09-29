@@ -488,17 +488,19 @@ function PayslipsView({ hotelId }: { hotelId: string }) {
         const lastDay = new Date(y, m, 0).getDate();
         const endDate = `${month}-${String(lastDay).padStart(2, "0")}`;
 
+        // Use .limit(1) instead of .maybeSingle() to safely handle duplicates
         const { data: existing, error: findErr } = await supabase
           .from("payroll_periods")
           .select("id")
           .eq("start_date", startDate)
           .eq("end_date", endDate)
-          .maybeSingle();
+          .order("id", { ascending: true })
+          .limit(1);
 
         if (findErr) throw findErr;
 
-        if (existing) {
-          setPeriodId(existing.id);
+        if (existing && existing.length > 0) {
+          setPeriodId(existing[0].id);
         } else {
           const { data: created, error: createErr } = await supabase
             .from("payroll_periods")
@@ -533,7 +535,6 @@ function PayslipsView({ hotelId }: { hotelId: string }) {
     },
     onSuccess: () => {
       toast.success("Payroll generated successfully!");
-      // Bump refresh key to force PayrollReport to re-fetch
       setRefreshKey((k) => k + 1);
       void qc.invalidateQueries({ queryKey: ["payroll-report"] });
     },
