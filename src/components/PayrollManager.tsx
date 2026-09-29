@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { PayrollReport } from "@/components/PayrollReport";
 import { AddStaffDialog } from "@/components/AddStaffDialog";
+import { SetSalaryDialog } from "@/components/SetSalaryDialog";
 
 type StaffOption = {
   staff_profile_id: string;
@@ -150,19 +151,18 @@ function StaffView({ hotelId }: { hotelId: string }) {
   const staff = useQuery({
     queryKey: ["hotel-staff", hotelId],
     queryFn: async () => {
-      // 1. Get all staff for this hotel
       const { data: staffData, error: staffErr } = await supabase
         .from("staff")
         .select(
           "id, employee_code, full_name, email, phone, position, active, hired_at, hotel_id",
         )
         .eq("hotel_id", hotelId)
+        .eq("active", true)
         .order("created_at", { ascending: false });
 
       if (staffErr) throw staffErr;
       if (!staffData || staffData.length === 0) return [] as StaffRow[];
 
-      // 2. Get the latest salary for each staff member
       const staffIds = staffData.map((s) => s.id);
       const { data: salaryData, error: salErr } = await supabase
         .from("staff_salary")
@@ -174,14 +174,13 @@ function StaffView({ hotelId }: { hotelId: string }) {
 
       if (salErr) throw salErr;
 
-      // 3. Attach the latest salary to each staff member
       const merged: StaffRow[] = staffData.map((s) => {
         const latest =
           (salaryData ?? []).find((sal) => sal.staff_id === s.id) ?? null;
         return {
           id: s.id,
           employee_code: s.employee_code,
-          full_name: s.full_name,
+          full_name: s.full_name || "New Staff",
           email: s.email,
           phone: s.phone,
           position: s.position,
@@ -197,7 +196,6 @@ function StaffView({ hotelId }: { hotelId: string }) {
 
   const removeStaff = useMutation({
     mutationFn: async (id: number) => {
-      // Soft-delete: set active = false
       const { error } = await supabase
         .from("staff")
         .update({ active: false })
@@ -279,7 +277,7 @@ function StaffView({ hotelId }: { hotelId: string }) {
                     variant={sal ? "secondary" : "outline"}
                     className="capitalize text-[10px]"
                   >
-                    {sal?.pay_type || "—"}
+                    {sal?.pay_type || "No salary"}
                   </Badge>
                   <Button
                     size="icon"
@@ -313,6 +311,13 @@ function StaffView({ hotelId }: { hotelId: string }) {
                   </p>
                 </div>
               </div>
+
+              {/* Set/Change Salary button */}
+              <SetSalaryDialog
+                staffId={s.id}
+                staffName={s.full_name}
+                existingSalary={sal}
+              />
             </Card>
           );
         })
