@@ -11,9 +11,11 @@ import {
   CheckCircle2,
   Users,
   RefreshCw,
+  UserCircle,
+  Phone,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useLang } from "@/lib/i18n";
+import { useLang, formatETB } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +30,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { PayrollReport } from "@/components/PayrollReport";
+import { AddStaffDialog } from "@/components/AddStaffDialog";
 
 type StaffOption = {
   staff_profile_id: string;
@@ -64,9 +67,30 @@ type AttendanceRow = {
   shift_date: string | null;
 };
 
+type StaffRow = {
+  id: number;
+  employee_code: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  position: string | null;
+  active: boolean;
+  hired_at: string | null;
+  latest_salary: {
+    pay_type: "monthly" | "hourly";
+    base_salary: number;
+    hourly_rate: number;
+    transport_allowance: number;
+    other_allowance: number;
+    effective_from: string;
+  } | null;
+};
+
 export function PayrollManager({ hotelId }: { hotelId: string }) {
   const { t } = useLang();
-  const [tab, setTab] = useState<"shifts" | "attendance" | "payroll">("shifts");
+  const [tab, setTab] = useState<"shifts" | "staff" | "attendance" | "payroll">(
+    "shifts",
+  );
 
   return (
     <div className="space-y-3">
@@ -79,6 +103,15 @@ export function PayrollManager({ hotelId }: { hotelId: string }) {
         >
           <CalendarClock className="mr-2 size-4" />
           {t("payroll.shifts_title")}
+        </Button>
+        <Button
+          size="sm"
+          variant={tab === "staff" ? "default" : "outline"}
+          onClick={() => setTab("staff")}
+          className="shrink-0"
+        >
+          <Users className="mr-2 size-4" />
+          Staff
         </Button>
         <Button
           size="sm"
@@ -101,8 +134,189 @@ export function PayrollManager({ hotelId }: { hotelId: string }) {
       </div>
 
       {tab === "shifts" ? <ShiftScheduler hotelId={hotelId} /> : null}
+      {tab === "staff" ? <StaffView hotelId={hotelId} /> : null}
       {tab === "attendance" ? <AttendanceView hotelId={hotelId} /> : null}
       {tab === "payroll" ? <PayslipsView hotelId={hotelId} /> : null}
+    </div>
+  );
+}
+
+/* ============================================================
+ * STAFF VIEW
+ * ============================================================ */
+function StaffView({ hotelId }: { hotelId: string }) {
+  const qc = useQueryClient();
+
+  const staff = useQuery({
+    queryKey: ["hotel-staff", hotelId],
+    queryFn: async () => {
+      // 1. Get all staff for this hotel
+      const { data: staffData, error: staffErr } = await supabase
+        .from("staff")
+        .select(
+          "id, employee_code, full_name, email, phone, position, active, hired_at, hotel_id",
+        )
+        .eq("hotel_id", hotelId)
+        .order("created_at", { ascending: false });
+
+      if (staffErr) throw staffErr;
+      if (!staffData || staffData.length === 0) return [] as StaffRow[];
+
+      // 2. Get the latest salary for each staff member
+      const staffIds = staffData.map((s) => s.id);
+      const { data: salaryData, error: salErr } = await supabase
+        .from("staff_salary")
+        .select(
+          "staff_id, pay_type, base_salary, hourly_rate, transport_allowance, other_allowance, effective_from",
+        )
+        .in("staff_id", staffIds)
+        .order("effective_from", { ascending: false });
+
+      if (salErr) throw salErr;
+
+      // 3. Attach the latest salary to each staff member
+      const merged: StaffRow[] = staffData.map((s) => {
+        const latest =
+          (salaryData ?? []).find((sal) => sal.staff_id === s.id) ?? null;
+        return {
+          id: s.id,
+          employee_code: s.employee_code,
+          full_name: s.full_name,
+          email: s.email,
+          phone: s.phone,
+          position: s.position,
+          active: s.active,
+          hired_at: s.hired_at,
+          latest_salary: latest,
+        };
+      });
+
+      return merged;
+    },
+  });
+
+  const removeStaff = useMutation({
+    mutationFn: async (id: number) => {
+      // Soft-delete: set active = false
+      const { error } = await supabase
+        .from("staff")
+        .update({ active: false })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Staff member removed");
+      void qc.invalidateQueries({ queryKey: ["hotel-staff", hotelId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className="space-y-3">
+      <AddStaffDialog hotelId={hotelId} />
+
+      <Card className="shadow-card flex items-center justify-between p-3">
+        <p className="text-xs text-muted-foreground">
+          {(staff.data ?? []).length} staff member
+          {(staff.data ?? []).length === 1 ? "" : "s"}
+        </p>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => staff.refetch()}
+          disabled={staff.isFetching}
+        >
+          <RefreshCw
+            className={`size-3.5 ${staff.isFetching ? "animate-spin" : ""}`}
+          />
+        </Button>
+      </Card>
+
+      {staff.isLoading ? (
+        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
+          <Loader2 className="mx-auto size-5 animate-spin" />
+        </Card>
+      ) : (staff.data ?? []).length === 0 ? (
+        <Card className="shadow-card flex flex-col items-center gap-2 p-6 text-center">
+          <Users className="size-7 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            No staff yet. Tap "Add Staff Member" to get started.
+          </p>
+        </Card>
+      ) : (
+        (staff.data ?? []).map((s) => {
+          const sal = s.latest_salary;
+          const payLabel = sal
+            ? sal.pay_type === "monthly"
+              ? `${formatETB(sal.base_salary)} / month`
+              : `${formatETB(sal.hourly_rate)} / hour`
+            : "No salary set";
+
+          return (
+            <Card key={s.id} className="shadow-card space-y-3 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent">
+                    <UserCircle className="size-6 text-primary" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">
+                      {s.full_name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {s.position || "Staff"} · {s.employee_code}
+                    </p>
+                    {s.phone ? (
+                      <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <Phone className="size-3" />
+                        {s.phone}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <Badge
+                    variant={sal ? "secondary" : "outline"}
+                    className="capitalize text-[10px]"
+                  >
+                    {sal?.pay_type || "—"}
+                  </Badge>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    disabled={removeStaff.isPending}
+                    onClick={() => {
+                      if (confirm(`Remove ${s.full_name}?`)) {
+                        removeStaff.mutate(s.id);
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-lg bg-muted p-2">
+                  <p className="text-[10px] text-muted-foreground">Salary</p>
+                  <p className="font-semibold">{payLabel}</p>
+                </div>
+                <div className="rounded-lg bg-muted p-2">
+                  <p className="text-[10px] text-muted-foreground">
+                    Allowances
+                  </p>
+                  <p className="font-semibold">
+                    {formatETB(
+                      Number(sal?.transport_allowance ?? 0) +
+                        Number(sal?.other_allowance ?? 0),
+                    )}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          );
+        })
+      )}
     </div>
   );
 }
@@ -478,7 +692,6 @@ function PayslipsView({ hotelId }: { hotelId: string }) {
   const [loadingPeriod, setLoadingPeriod] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Find or create the payroll period for the selected month
   useEffect(() => {
     const findOrCreate = async () => {
       setLoadingPeriod(true);
@@ -488,7 +701,6 @@ function PayslipsView({ hotelId }: { hotelId: string }) {
         const lastDay = new Date(y, m, 0).getDate();
         const endDate = `${month}-${String(lastDay).padStart(2, "0")}`;
 
-        // Use .limit(1) instead of .maybeSingle() to safely handle duplicates
         const { data: existing, error: findErr } = await supabase
           .from("payroll_periods")
           .select("id")
