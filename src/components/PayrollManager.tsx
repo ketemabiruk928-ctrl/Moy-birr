@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -13,7 +13,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useLang, formatETB } from "@/lib/i18n";
+import { useLang } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,7 @@ import {
   DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { PayrollReport } from "@/components/PayrollReport";
 
 type StaffOption = {
   staff_profile_id: string;
@@ -49,25 +50,6 @@ type Shift = {
   clocked_in_at: string | null;
   clocked_out_at: string | null;
   hours_worked: number | null;
-};
-
-type PayrollRow = {
-  id: string;
-  staff_profile_id: string;
-  staff_name: string | null;
-  job_position: string | null;
-  month: string;
-  base_salary: number;
-  tips_earned: number;
-  hours_worked: number;
-  shifts_worked: number;
-  shifts_missed: number;
-  advances: number;
-  deductions: number;
-  bonus: number;
-  net_pay: number;
-  status: string;
-  paid_at: string | null;
 };
 
 type AttendanceRow = {
@@ -484,52 +466,76 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
 }
 
 /* ============================================================
- * PAYSLIPS VIEW (NO TIPS)
+ * PAYSLIPS VIEW (Ethiopian Tax System)
  * ============================================================ */
 function PayslipsView({ hotelId }: { hotelId: string }) {
   const { t } = useLang();
   const qc = useQueryClient();
-  const currentMonth = new Date().toISOString().slice(0, 7) + "-01";
-  const [month, setMonth] = useState(currentMonth);
 
-  const payslips = useQuery({
-    queryKey: ["owner-payroll", hotelId, month],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("list_payroll_for_hotel", {
-        _hotel_id: hotelId,
-        _month: month,
-      });
-      if (error) throw error;
-      return (data ?? []) as PayrollRow[];
-    },
-  });
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const [month, setMonth] = useState(currentMonth);
+  const [periodId, setPeriodId] = useState<number | null>(null);
+  const [loadingPeriod, setLoadingPeriod] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Find or create the payroll period for the selected month
+  useEffect(() => {
+    const findOrCreate = async () => {
+      setLoadingPeriod(true);
+      try {
+        const startDate = `${month}-01`;
+        const [y, m] = month.split("-").map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        const endDate = `${month}-${String(lastDay).padStart(2, "0")}`;
+
+        const { data: existing, error: findErr } = await supabase
+          .from("payroll_periods")
+          .select("id")
+          .eq("start_date", startDate)
+          .eq("end_date", endDate)
+          .maybeSingle();
+
+        if (findErr) throw findErr;
+
+        if (existing) {
+          setPeriodId(existing.id);
+        } else {
+          const { data: created, error: createErr } = await supabase
+            .from("payroll_periods")
+            .insert({
+              start_date: startDate,
+              end_date: endDate,
+              status: "open",
+            })
+            .select("id")
+            .single();
+          if (createErr) throw createErr;
+          setPeriodId(created.id);
+        }
+      } catch (e: any) {
+        toast.error(e.message);
+        setPeriodId(null);
+      } finally {
+        setLoadingPeriod(false);
+      }
+    };
+
+    findOrCreate();
+  }, [month]);
 
   const generate = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.rpc("calculate_monthly_payroll", {
-        _hotel_id: hotelId,
-        _month: month,
-      });
-      if (error) throw error;
-      return data as number;
-    },
-    onSuccess: (count) => {
-      toast.success(t("payroll.payroll_generated", { count: String(count) }));
-      void qc.invalidateQueries({ queryKey: ["owner-payroll", hotelId] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const markPaid = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.rpc("mark_payroll_paid", {
-        _payroll_id: id,
+      if (!periodId) throw new Error("No payroll period available");
+      const { error } = await supabase.rpc("generate_payroll_for_period", {
+        p_period_id: periodId,
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success(t("payroll.marked_paid"));
-      void qc.invalidateQueries({ queryKey: ["owner-payroll", hotelId] });
+      toast.success("Payroll generated successfully!");
+      // Bump refresh key to force PayrollReport to re-fetch
+      setRefreshKey((k) => k + 1);
+      void qc.invalidateQueries({ queryKey: ["payroll-report"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -538,16 +544,16 @@ function PayslipsView({ hotelId }: { hotelId: string }) {
     <div className="space-y-3">
       <Card className="shadow-card space-y-3 p-4">
         <div className="space-y-1.5">
-          <Label>{t("payroll.month")}</Label>
+          <Label>{t("payroll.month") || "Month"}</Label>
           <Input
             type="month"
-            value={month.slice(0, 7)}
-            onChange={(e) => setMonth(e.target.value + "-01")}
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
           />
         </div>
         <Button
           className="w-full"
-          disabled={generate.isPending}
+          disabled={generate.isPending || !periodId || loadingPeriod}
           onClick={() => generate.mutate()}
         >
           {generate.isPending ? (
@@ -555,96 +561,23 @@ function PayslipsView({ hotelId }: { hotelId: string }) {
           ) : (
             <DollarSign className="mr-2 size-4" />
           )}
-          {t("payroll.generate_payroll")}
+          {t("payroll.generate_payroll") || "Generate payslips"}
         </Button>
         <p className="text-[11px] text-muted-foreground">
-          {t("payroll.payroll_desc")}
+          Auto-calculate monthly salaries with Ethiopian income tax.
         </p>
       </Card>
 
-      {payslips.isLoading ? (
+      {loadingPeriod ? (
         <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
           <Loader2 className="mx-auto size-5 animate-spin" />
         </Card>
-      ) : (payslips.data ?? []).length === 0 ? (
-        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-          {t("payroll.no_payroll")}
-        </Card>
+      ) : periodId ? (
+        <PayrollReport key={`${periodId}-${refreshKey}`} periodId={periodId} />
       ) : (
-        (payslips.data ?? []).map((p) => (
-          <Card key={p.id} className="shadow-card space-y-3 p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold">
-                  {p.staff_name || t("staff_member")}
-                </p>
-                <p className="text-xs capitalize text-muted-foreground">
-                  {p.job_position || "staff"}
-                </p>
-              </div>
-              <Badge
-                variant={
-                  p.status === "paid"
-                    ? "secondary"
-                    : p.status === "approved"
-                      ? "default"
-                      : "outline"
-                }
-                className="capitalize text-[10px]"
-              >
-                {t(`payroll.status_${p.status}`) || p.status}
-              </Badge>
-            </div>
-
-            {/* 3 cards: Base, Hours, Shifts (NO TIPS CARD) */}
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <div className="rounded-lg bg-muted p-2">
-                <p className="text-[10px] text-muted-foreground">
-                  {t("payroll.base_salary")}
-                </p>
-                <p className="font-semibold">{formatETB(p.base_salary)}</p>
-              </div>
-              <div className="rounded-lg bg-muted p-2">
-                <p className="text-[10px] text-muted-foreground">
-                  {t("payroll.hours")}
-                </p>
-                <p className="font-semibold">
-                  {Number(p.hours_worked).toFixed(1)}h
-                </p>
-              </div>
-              <div className="rounded-lg bg-muted p-2">
-                <p className="text-[10px] text-muted-foreground">
-                  {t("payroll.shifts_worked")}
-                </p>
-                <p className="font-semibold">{p.shifts_worked}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between border-t border-border pt-3">
-              <div>
-                <p className="text-[10px] uppercase text-muted-foreground">
-                  {t("payroll.net_pay")}
-                </p>
-                <p className="text-lg font-bold">{formatETB(p.net_pay)}</p>
-              </div>
-              {p.status !== "paid" ? (
-                <Button
-                  size="sm"
-                  disabled={markPaid.isPending}
-                  onClick={() => markPaid.mutate(p.id)}
-                >
-                  <CheckCircle2 className="mr-1 size-3.5" />
-                  {t("payroll.mark_paid")}
-                </Button>
-              ) : (
-                <p className="flex items-center gap-1 text-xs text-success">
-                  <CheckCircle2 className="size-4" />
-                  {p.paid_at ? new Date(p.paid_at).toLocaleDateString() : ""}
-                </p>
-              )}
-            </div>
-          </Card>
-        ))
+        <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
+          Could not load payroll period.
+        </Card>
       )}
     </div>
   );
