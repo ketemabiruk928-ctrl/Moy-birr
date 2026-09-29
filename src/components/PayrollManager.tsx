@@ -56,16 +56,18 @@ type Shift = {
   hours_worked: number | null;
 };
 
-type AttendanceRow = {
-  id: string;
-  staff_profile_id: string;
-  staff_name: string | null;
-  job_position: string | null;
-  clocked_in_at: string;
-  clocked_out_at: string | null;
-  hours_worked: number | null;
-  late_minutes: number | null;
-  shift_date: string | null;
+type AttendanceRecord = {
+  id: number;
+  staff_id: number;
+  clock_in: string;
+  clock_out: string | null;
+  total_minutes: number | null;
+  status: string;
+  staff: {
+    full_name: string;
+    employee_code: string;
+    position: string | null;
+  };
 };
 
 type StaffRow = {
@@ -312,7 +314,6 @@ function StaffView({ hotelId }: { hotelId: string }) {
                 </div>
               </div>
 
-              {/* Set/Change Salary button */}
               <SetSalaryDialog
                 staffId={s.id}
                 staffName={s.full_name}
@@ -572,25 +573,50 @@ function ShiftScheduler({ hotelId }: { hotelId: string }) {
 }
 
 /* ============================================================
- * ATTENDANCE VIEW
+ * ATTENDANCE VIEW (reads from staff_attendance)
  * ============================================================ */
 function AttendanceView({ hotelId }: { hotelId: string }) {
   const { t } = useLang();
   const qc = useQueryClient();
 
-  const fromDate = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-  const toDate = new Date().toISOString().slice(0, 10);
+  // Last 14 days
+  const fromDate = new Date(Date.now() - 14 * 86400000).toISOString();
+  const toDate = new Date().toISOString();
 
   const attendance = useQuery({
-    queryKey: ["owner-attendance", hotelId, fromDate, toDate],
+    queryKey: ["owner-attendance-new", hotelId, fromDate, toDate],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("list_attendance_for_hotel", {
-        _hotel_id: hotelId,
-        _from: fromDate,
-        _to: toDate,
-      });
+      // 1. Get all staff ids for this hotel
+      const { data: staffData, error: staffErr } = await supabase
+        .from("staff")
+        .select("id")
+        .eq("hotel_id", hotelId);
+      if (staffErr) throw staffErr;
+
+      const staffIds = (staffData ?? []).map((s) => s.id);
+      if (staffIds.length === 0) return [] as AttendanceRecord[];
+
+      // 2. Get attendance records for those staff
+      const { data, error } = await supabase
+        .from("staff_attendance")
+        .select(
+          `
+          id,
+          staff_id,
+          clock_in,
+          clock_out,
+          total_minutes,
+          status,
+          staff ( full_name, employee_code, position )
+        `,
+        )
+        .in("staff_id", staffIds)
+        .gte("clock_in", fromDate)
+        .lte("clock_in", toDate)
+        .order("clock_in", { ascending: false });
+
       if (error) throw error;
-      return (data ?? []) as AttendanceRow[];
+      return (data ?? []) as unknown as AttendanceRecord[];
     },
   });
 
@@ -601,12 +627,12 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
           <p className="text-sm font-semibold">
             {t("payroll.attendance_title")}
           </p>
-          <p className="text-xs text-muted-foreground">Last 7 days</p>
+          <p className="text-xs text-muted-foreground">Last 14 days</p>
         </div>
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => qc.invalidateQueries({ queryKey: ["owner-attendance"] })}
+          onClick={() => qc.invalidateQueries({ queryKey: ["owner-attendance-new"] })}
           disabled={attendance.isFetching}
         >
           <RefreshCw
@@ -628,27 +654,31 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
         </Card>
       ) : (
         (attendance.data ?? []).map((a) => {
-          const isActive = a.clocked_in_at && !a.clocked_out_at;
+          const isActive = a.clock_in && !a.clock_out;
+          const clockIn = new Date(a.clock_in);
+          const hours = a.total_minutes
+            ? (a.total_minutes / 60).toFixed(2)
+            : null;
           return (
             <Card key={a.id} className="shadow-card space-y-2 p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold">
-                    {a.staff_name || t("staff_member")}
+                    {a.staff?.full_name || t("staff_member")}
                   </p>
                   <p className="text-xs capitalize text-muted-foreground">
-                    {a.job_position || "staff"}
+                    {a.staff?.position || "staff"} · {a.staff?.employee_code}
                   </p>
                   <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="size-3" />
-                    {new Date(a.clocked_in_at).toLocaleString([], {
+                    {clockIn.toLocaleString([], {
                       month: "short",
                       day: "numeric",
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
-                    {a.clocked_out_at
-                      ? ` → ${new Date(a.clocked_out_at).toLocaleTimeString([], {
+                    {a.clock_out
+                      ? ` → ${new Date(a.clock_out).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}`
@@ -662,18 +692,16 @@ function AttendanceView({ hotelId }: { hotelId: string }) {
                     </Badge>
                   ) : (
                     <Badge variant="secondary" className="text-[10px]">
-                      {Number(a.hours_worked ?? 0).toFixed(2)}h
+                      {hours ?? "—"}h
                     </Badge>
                   )}
-                  {a.late_minutes && a.late_minutes > 0 ? (
-                    <p className="mt-1 text-[10px] text-destructive">
-                      {a.late_minutes} min late
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-[10px] text-success">
-                      {t("payroll.on_time")}
-                    </p>
-                  )}
+                  <p
+                    className={`mt-1 text-[10px] capitalize ${
+                      a.status === "open" ? "text-success" : "text-muted-foreground"
+                    }`}
+                  >
+                    {a.status}
+                  </p>
                 </div>
               </div>
             </Card>
