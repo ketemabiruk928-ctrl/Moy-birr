@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -589,6 +589,17 @@ function ProfilePage() {
               })
             )}
           </div>
+        </div>
+
+        {/* Legal links */}
+        <div className="flex justify-center gap-3 py-2 text-xs text-muted-foreground">
+          <Link to="/privacy" className="underline">
+            Privacy Policy
+          </Link>
+          <span>·</span>
+          <Link to="/terms" className="underline">
+            Terms of Service
+          </Link>
         </div>
 
         <Button variant="outline" className="w-full" onClick={() => void signOut()}>
