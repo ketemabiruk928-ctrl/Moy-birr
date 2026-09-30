@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ShieldCheck, Globe } from "lucide-react";
@@ -321,6 +321,20 @@ function AuthPage() {
               <Button className="w-full" size="lg" disabled={busy} onClick={register}>
                 {t("auth.register")}
               </Button>
+
+              {/* Legal acceptance */}
+              <p className="text-center text-[11px] text-muted-foreground">
+                By signing up you agree to our{" "}
+                <Link to="/terms" className="underline text-primary">
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link to="/privacy" className="underline text-primary">
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+
               <p className="flex items-start gap-2 text-xs text-muted-foreground">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
                 {t("auth.wallet_notice")}
