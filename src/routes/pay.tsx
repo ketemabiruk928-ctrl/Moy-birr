@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { QrCode, Star, Gift, Navigation, Search } from "lucide-react";
+import { QrCode, Star, Gift, Navigation, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { formatETB, useLang } from "@/lib/i18n";
@@ -115,8 +115,8 @@ function PayPage() {
   const { status, locate } = useMyLocation();
 
   // ------------------------------------------------------------
-  // SECURITY: Only fetch hotels on exact name or code match
-  // No more loading every hotel into the browser.
+  // SECURITY: Only fetch hotels on exact name / code / phone match
+  // Requires at least 3 characters before querying
   // ------------------------------------------------------------
   const trimmedQuery = hotelQuery.trim();
 
@@ -126,10 +126,11 @@ function PayPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("hotels_public")
-        .select("id,name,city,hotel_code")
+        .select("id,name,city,hotel_code,phone")
         .or(
           `hotel_code.ilike.${trimmedQuery},` +
-            `name.ilike.${trimmedQuery}`,
+            `name.ilike.${trimmedQuery},` +
+            `phone.ilike.${trimmedQuery}`,
         )
         .limit(1);
       if (error) throw error;
@@ -137,8 +138,12 @@ function PayPage() {
     },
   });
 
-  // Keep the selected hotel visible even after the query changes
   const selectedHotel = hotelSearch.data?.find((h) => h.id === hotelId) ?? null;
+  const hotelResults = hotelSearch.data ?? [];
+  const showingNoMatch =
+    trimmedQuery.length >= 3 &&
+    !hotelSearch.isLoading &&
+    hotelResults.length === 0;
 
   // ------------------------------------------------------------
   // Staff list — scoped to the selected hotel only
@@ -303,15 +308,6 @@ function PayPage() {
     }
   };
 
-  // ------------------------------------------------------------
-  // Search results — only the single exact match
-  // ------------------------------------------------------------
-  const hotelResults = hotelSearch.data ?? [];
-  const showingNoMatch =
-    trimmedQuery.length >= 3 &&
-    !hotelSearch.isLoading &&
-    hotelResults.length === 0;
-
   const staffResults = (() => {
     const q = staffName.trim().toLowerCase();
     return (staff.data ?? []).filter((s) => {
@@ -323,6 +319,15 @@ function PayPage() {
       );
     });
   })();
+
+  // ------------------------------------------------------------
+  // Display value for the hotel search bar
+  // Shows hotel name when selected, otherwise shows typed query
+  // ------------------------------------------------------------
+  const displayValue =
+    selectedHotel && !showHotelSearch
+      ? `${selectedHotel.name}${selectedHotel.city ? " · " + selectedHotel.city : ""}`
+      : hotelQuery;
 
   return (
     <>
@@ -361,43 +366,48 @@ function PayPage() {
                   : t("pay_page.use_gps")}
           </button>
 
+          {/* ---------------- HOTEL SEARCH ---------------- */}
           <div className="mt-4 space-y-2">
             <Label>{t("pay_page.hotel_label")}</Label>
-            {selectedHotel && !showHotelSearch ? (
-              <div className="flex items-center justify-between rounded-xl border border-primary bg-accent p-3">
-                <span className="text-sm">
-                  <span className="font-medium">{selectedHotel.name}</span>
-                  <span className="text-muted-foreground"> · {selectedHotel.city}</span>
-                </span>
-                <Button variant="ghost" size="sm" onClick={() => setShowHotelSearch(true)}>
-                  {t("pay_page.change")}
-                </Button>
-              </div>
-            ) : (
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => setShowHotelSearch(true)}
-                style={{ display: showHotelSearch ? "none" : undefined }}
-              >
-                <Search className="mr-2 size-4" />
-                {t("search_hotel")}
-              </Button>
-            )}
 
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9 pr-10"
+                value={displayValue}
+                onChange={(e) => {
+                  setHotelQuery(e.target.value);
+                  setShowHotelSearch(true);
+                  setHotelId(null);
+                  setStaffId(null);
+                  setStaffName("");
+                }}
+                onFocus={() => setShowHotelSearch(true)}
+                placeholder={t("pay_page.hotel_search_placeholder")}
+              />
+
+              {/* Clear button — shows when a hotel is selected */}
+              {selectedHotel && !showHotelSearch ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHotelId(null);
+                    setStaffId(null);
+                    setStaffName("");
+                    setHotelQuery("");
+                    setShowHotelSearch(true);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="Clear selection"
+                >
+                  <X className="size-4" />
+                </button>
+              ) : null}
+            </div>
+
+            {/* Dropdown of matches — appears only while typing */}
             {showHotelSearch ? (
               <div className="space-y-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    autoFocus
-                    className="pl-9"
-                    value={hotelQuery}
-                    onChange={(e) => setHotelQuery(e.target.value)}
-                    placeholder={t("pay_page.hotel_search_placeholder")}
-                  />
-                </div>
-
                 {trimmedQuery.length > 0 && trimmedQuery.length < 3 ? (
                   <p className="text-xs text-muted-foreground">
                     Type at least 3 characters…
@@ -422,9 +432,7 @@ function PayPage() {
                           setHotelQuery("");
                           setShowHotelSearch(false);
                         }}
-                        className={`rounded-xl border p-3 text-left text-sm ${
-                          hotelId === h.id ? "border-primary bg-accent" : "border-border"
-                        }`}
+                        className="rounded-xl border border-primary bg-accent p-3 text-left text-sm transition-colors hover:bg-accent/80"
                       >
                         <span className="font-medium">{h.name}</span>
                         <span className="text-muted-foreground"> · {h.city}</span>
