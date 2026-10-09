@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { LogOut, MapPin, Star, Languages, Navigation, IdCard } from "lucide-react";
+import { LogOut, MapPin, Star, Languages, Navigation, IdCard, History } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { formatETB, languages, useLang } from "@/lib/i18n";
@@ -208,6 +208,12 @@ function ProfilePage() {
   const [hotelCode, setHotelCode] = useState("");
 
   const employment = staffProfile.data?.employment_status ?? "unlinked";
+
+  // Filter: only show active and pending bookings inline
+  const activeBookings = (bookings.data ?? []).filter(
+    (b) => b.status !== "cancelled" && b.status !== "completed",
+  );
+  const totalBookings = (bookings.data ?? []).length;
 
   return (
     <>
@@ -545,12 +551,12 @@ function ProfilePage() {
         <div>
           <h2 className="mb-2 px-1 text-sm font-semibold">{t("my_bookings")}</h2>
           <div className="space-y-3">
-            {(bookings.data ?? []).length === 0 ? (
+            {activeBookings.length === 0 ? (
               <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
                 {t("profile_page.no_bookings")}
               </Card>
             ) : (
-              (bookings.data ?? []).map((b) => {
+              activeBookings.map((b) => {
                 const h = b.hotels as { name?: string; city?: string } | null;
                 return (
                   <Card key={b.id} className="shadow-card space-y-2 p-4">
@@ -561,7 +567,7 @@ function ProfilePage() {
                           {b.room_type} · {b.check_in} → {b.check_out}
                         </p>
                       </div>
-                      <Badge variant={b.status === "cancelled" ? "destructive" : "secondary"}>
+                      <Badge variant="secondary">
                         {t(`status.${b.status}`) || b.status}
                       </Badge>
                     </div>
@@ -589,6 +595,16 @@ function ProfilePage() {
               })
             )}
           </div>
+
+          {/* Booking History button — shown only if there are any bookings */}
+          {totalBookings > 0 ? (
+            <Button asChild variant="outline" className="mt-3 w-full">
+              <Link to="/bookings">
+                <History className="mr-2 size-4" />
+                Booking History ({totalBookings})
+              </Link>
+            </Button>
+          ) : null}
         </div>
 
         {/* Legal links */}
