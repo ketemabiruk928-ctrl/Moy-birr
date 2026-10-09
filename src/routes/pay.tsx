@@ -114,18 +114,35 @@ function PayPage() {
 
   const { status, locate } = useMyLocation();
 
-  const hotels = useQuery({
-    queryKey: ["hotels-public"],
+  // ------------------------------------------------------------
+  // SECURITY: Only fetch hotels on exact name or code match
+  // No more loading every hotel into the browser.
+  // ------------------------------------------------------------
+  const trimmedQuery = hotelQuery.trim();
+
+  const hotelSearch = useQuery({
+    queryKey: ["hotel-search-exact", trimmedQuery.toUpperCase()],
+    enabled: trimmedQuery.length >= 3,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("hotels_public")
         .select("id,name,city,hotel_code")
-        .order("name");
+        .or(
+          `hotel_code.ilike.${trimmedQuery},` +
+            `name.ilike.${trimmedQuery}`,
+        )
+        .limit(1);
       if (error) throw error;
       return data ?? [];
     },
   });
 
+  // Keep the selected hotel visible even after the query changes
+  const selectedHotel = hotelSearch.data?.find((h) => h.id === hotelId) ?? null;
+
+  // ------------------------------------------------------------
+  // Staff list — scoped to the selected hotel only
+  // ------------------------------------------------------------
   const staff = useQuery({
     queryKey: ["staff-public", hotelId],
     enabled: !!hotelId,
@@ -286,20 +303,14 @@ function PayPage() {
     }
   };
 
-  const selectedHotel = (hotels.data ?? []).find((h) => h.id === hotelId) ?? null;
-
-  const hotelResults = (() => {
-    const q = hotelQuery.trim().toLowerCase();
-    const rows = (hotels.data ?? []).filter((h) => {
-      if (!q) return true;
-      return (
-        h.name.toLowerCase().includes(q) ||
-        (h.city ?? "").toLowerCase().includes(q) ||
-        (h.hotel_code ?? "").toLowerCase().includes(q)
-      );
-    });
-    return rows.slice(0, 6);
-  })();
+  // ------------------------------------------------------------
+  // Search results — only the single exact match
+  // ------------------------------------------------------------
+  const hotelResults = hotelSearch.data ?? [];
+  const showingNoMatch =
+    trimmedQuery.length >= 3 &&
+    !hotelSearch.isLoading &&
+    hotelResults.length === 0;
 
   const staffResults = (() => {
     const q = staffName.trim().toLowerCase();
@@ -386,11 +397,20 @@ function PayPage() {
                     placeholder={t("pay_page.hotel_search_placeholder")}
                   />
                 </div>
-                {hotelResults.length === 0 ? (
+
+                {trimmedQuery.length > 0 && trimmedQuery.length < 3 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Type at least 3 characters…
+                  </p>
+                ) : null}
+
+                {showingNoMatch ? (
                   <p className="text-xs text-muted-foreground">
                     {t("pay_page.no_hotel_match")}
                   </p>
-                ) : (
+                ) : null}
+
+                {hotelResults.length > 0 ? (
                   <div className="grid gap-2">
                     {hotelResults.map((h) => (
                       <button
@@ -416,7 +436,7 @@ function PayPage() {
                       </button>
                     ))}
                   </div>
-                )}
+                ) : null}
               </div>
             ) : null}
           </div>
