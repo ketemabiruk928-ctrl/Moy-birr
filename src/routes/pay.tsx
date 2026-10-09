@@ -52,6 +52,13 @@ type ParsedQr =
   | { kind: "person"; code: string }
   | null;
 
+type HotelOption = {
+  id: string;
+  name: string;
+  city: string | null;
+  hotel_code: string | null;
+};
+
 function parseQrValue(raw: string): ParsedQr {
   const text = raw.trim();
   if (!text) return null;
@@ -102,6 +109,7 @@ function PayPage() {
 
   const search = Route.useSearch();
   const [hotelId, setHotelId] = useState<string | null>(search.hotel ?? null);
+  const [selectedHotelData, setSelectedHotelData] = useState<HotelOption | null>(null);
   const [staffId, setStaffId] = useState<string | null>(search.staff ?? null);
   const [bill, setBill] = useState("");
   const [tip, setTip] = useState("");
@@ -116,7 +124,7 @@ function PayPage() {
 
   const trimmedQuery = hotelQuery.trim();
 
-  // Robust search: tries code, then name, then phone — safely
+  // Robust search: try code, then name, then phone
   const hotelSearch = useQuery({
     queryKey: ["hotel-search-exact", trimmedQuery.toUpperCase()],
     enabled: trimmedQuery.length >= 3,
@@ -124,7 +132,7 @@ function PayPage() {
       const q = trimmedQuery;
       const qUpper = trimmedQuery.toUpperCase();
 
-      // 1. Try exact hotel_code match (case-insensitive)
+      // 1. Exact hotel_code
       const codeRes = await supabase
         .from("hotels_public")
         .select("id,name,city,hotel_code")
@@ -132,7 +140,7 @@ function PayPage() {
         .limit(1);
       if (codeRes.data && codeRes.data.length > 0) return codeRes.data;
 
-      // 2. Try exact name match (case-insensitive)
+      // 2. Exact name
       const nameRes = await supabase
         .from("hotels_public")
         .select("id,name,city,hotel_code")
@@ -140,7 +148,7 @@ function PayPage() {
         .limit(1);
       if (nameRes.data && nameRes.data.length > 0) return nameRes.data;
 
-      // 3. Try phone match (safe — column exists in your DB)
+      // 3. Phone (safe)
       try {
         const phoneRes = await supabase
           .from("hotels_public")
@@ -149,15 +157,14 @@ function PayPage() {
           .limit(1);
         if (phoneRes.data && phoneRes.data.length > 0) return phoneRes.data;
       } catch {
-        /* phone column might not exist in this view */
+        /* ignore */
       }
 
       return [];
     },
   });
 
-  const selectedHotel = hotelSearch.data?.find((h) => h.id === hotelId) ?? null;
-  const hotelResults = hotelSearch.data ?? [];
+  const hotelResults = (hotelSearch.data ?? []) as HotelOption[];
   const showingNoMatch =
     trimmedQuery.length >= 3 &&
     !hotelSearch.isLoading &&
@@ -335,9 +342,12 @@ function PayPage() {
     });
   })();
 
+  // Display value: shows selected hotel name, otherwise typed query
   const displayValue =
-    selectedHotel && !showHotelSearch
-      ? `${selectedHotel.name}${selectedHotel.city ? " · " + selectedHotel.city : ""}`
+    selectedHotelData && !showHotelSearch
+      ? `${selectedHotelData.name}${
+          selectedHotelData.city ? " · " + selectedHotelData.city : ""
+        }`
       : hotelQuery;
 
   return (
@@ -389,6 +399,7 @@ function PayPage() {
                   setHotelQuery(e.target.value);
                   setShowHotelSearch(true);
                   setHotelId(null);
+                  setSelectedHotelData(null);
                   setStaffId(null);
                   setStaffName("");
                 }}
@@ -396,11 +407,12 @@ function PayPage() {
                 placeholder={t("pay_page.hotel_search_placeholder")}
               />
 
-              {selectedHotel && !showHotelSearch ? (
+              {selectedHotelData && !showHotelSearch ? (
                 <button
                   type="button"
                   onClick={() => {
                     setHotelId(null);
+                    setSelectedHotelData(null);
                     setStaffId(null);
                     setStaffName("");
                     setHotelQuery("");
@@ -439,6 +451,7 @@ function PayPage() {
                         key={h.id}
                         onClick={() => {
                           setHotelId(h.id);
+                          setSelectedHotelData(h);
                           setStaffId(null);
                           setStaffName("");
                           setHotelQuery("");
