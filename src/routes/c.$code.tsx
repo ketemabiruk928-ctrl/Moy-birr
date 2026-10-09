@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { MapPin, Star, IdCard, Gift } from "lucide-react";
+import { MapPin, Star, Gift } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -23,18 +23,6 @@ export const Route = createFileRoute("/c/$code")({
   component: PublicCardPage,
 });
 
-type PersonCard = {
-  kind: "guest" | "owner" | "staff";
-  full_name: string | null;
-  moybirr_id: string | null;
-  photo_url: string | null;
-  position?: string | null;
-  rating?: number | null;
-  rating_count?: number | null;
-  hotel_name?: string | null;
-  hotel_city?: string | null;
-};
-
 type HotelRow = {
   id: string;
   name: string;
@@ -53,17 +41,33 @@ const tipPercents = [5, 10, 15];
 function PublicCardPage() {
   const { code } = Route.useParams();
   const normalized = code.toUpperCase();
-  const prefix = normalized.slice(0, 2);
 
-  const isHotel = prefix === "MH";
+  // Only MH- codes are valid payment points.
+  // Everything else (MS-, MG-, MO-, random text) is rejected.
+  const isHotel = /^MH-\d+$/i.test(normalized);
+
+  if (!isHotel) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="bg-gradient-primary px-6 pt-14 pb-12 text-primary-foreground">
+          <div className="mx-auto w-full max-w-lg">
+            <p className="text-xs uppercase tracking-wider opacity-80">Moybirr</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">Invalid QR</h1>
+          </div>
+        </div>
+        <div className="mx-auto -mt-6 w-full max-w-lg px-4 pb-10">
+          <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
+            This QR code is not a Moybirr hotel payment code. Only hotel QR
+            codes starting with <strong>MH-</strong> are accepted.
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
-      {isHotel ? (
-        <HotelPayPage code={normalized} />
-      ) : (
-        <PersonCardPage code={normalized} prefix={prefix} />
-      )}
+      <HotelPayPage code={normalized} />
     </div>
   );
 }
@@ -89,6 +93,11 @@ function HotelPayPage({ code }: { code: string }) {
 
   const hotel = useQuery({
     queryKey: ["c-hotel", code],
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    retry: 1,
     queryFn: async (): Promise<HotelRow | null> => {
       const { data, error } = await supabase
         .from("hotels_public")
@@ -226,6 +235,10 @@ function HotelPayPage({ code }: { code: string }) {
         {hotel.isLoading ? (
           <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
             Loading…
+          </Card>
+        ) : hotel.isError ? (
+          <Card className="shadow-card p-6 text-center text-sm text-destructive">
+            Connection error. Please try again.
           </Card>
         ) : !hotel.data ? (
           <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
@@ -442,131 +455,6 @@ function HotelPayPage({ code }: { code: string }) {
                   {pay.isPending ? "Paying…" : `Pay ${formatETB(total)}`}
                 </Button>
               )}
-            </Card>
-          </>
-        )}
-      </div>
-    </>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Person cards (guest / owner / staff) — still informational only
-// ─────────────────────────────────────────────────────────────────────────
-
-function PersonCardPage({ code, prefix }: { code: string; prefix: string }) {
-  const person = useQuery({
-    queryKey: ["c-person", code],
-    queryFn: async (): Promise<PersonCard | null> => {
-      if (prefix === "MS") {
-        const { data, error } = await supabase
-          .from("staff_public")
-          .select(
-            "full_name, moybirr_id, photo_url, position, rating, rating_count, hotel_name, hotel_city",
-          )
-          .eq("moybirr_id", code)
-          .maybeSingle();
-        if (error) throw error;
-        return data ? { kind: "staff", ...data } : null;
-      }
-
-      const { data, error } = await supabase
-        .from("profiles_public")
-        .select("full_name, moybirr_id, photo_url")
-        .eq("moybirr_id", code)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) return null;
-      return {
-        kind: prefix === "MO" ? "owner" : "guest",
-        full_name: data.full_name,
-        moybirr_id: data.moybirr_id,
-        photo_url: data.photo_url,
-      };
-    },
-  });
-
-  return (
-    <>
-      <div className="bg-gradient-primary px-6 pt-14 pb-12 text-primary-foreground">
-        <div className="mx-auto w-full max-w-lg">
-          <p className="text-xs uppercase tracking-wider opacity-80">Moybirr</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">
-            {person.data?.full_name ?? "Loading…"}
-          </h1>
-          <p className="mt-1 font-mono text-sm opacity-90">{code}</p>
-        </div>
-      </div>
-
-      <div className="mx-auto -mt-6 w-full max-w-lg space-y-4 px-4 pb-10">
-        {person.isLoading ? (
-          <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-            Loading…
-          </Card>
-        ) : !person.data ? (
-          <Card className="shadow-card p-6 text-center text-sm text-muted-foreground">
-            This QR code doesn't match a Moybirr account.
-          </Card>
-        ) : (
-          <>
-            <Card className="shadow-card space-y-4 p-5 text-center">
-              {person.data.photo_url ? (
-                <img
-                  src={person.data.photo_url}
-                  alt={person.data.full_name ?? "User"}
-                  className="mx-auto size-24 rounded-full object-cover"
-                />
-              ) : null}
-
-              <div>
-                <p className="text-lg font-bold">{person.data.full_name ?? "Moybirr user"}</p>
-                {person.data.kind === "staff" && person.data.position ? (
-                  <p className="text-sm capitalize text-muted-foreground">
-                    {person.data.position}
-                  </p>
-                ) : null}
-              </div>
-
-              {person.data.moybirr_id ? (
-                <p className="flex items-center justify-center gap-1 font-mono text-sm text-muted-foreground">
-                  <IdCard className="size-4" />
-                  {person.data.moybirr_id}
-                </p>
-              ) : null}
-
-              {person.data.kind === "staff" ? (
-                <>
-                  {person.data.hotel_name ? (
-                    <p className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
-                      <MapPin className="size-4" />
-                      {person.data.hotel_name}
-                      {person.data.hotel_city ? ` · ${person.data.hotel_city}` : ""}
-                    </p>
-                  ) : null}
-                  <p className="flex items-center justify-center gap-1 text-sm font-semibold">
-                    <Star className="size-4 fill-primary text-primary" />
-                    {Number(person.data.rating ?? 0).toFixed(1)}
-                    <span className="text-xs font-normal text-muted-foreground">
-                      ({person.data.rating_count ?? 0} ratings)
-                    </span>
-                  </p>
-                </>
-              ) : null}
-            </Card>
-
-            <Card className="shadow-card space-y-3 p-4 text-center">
-              <p className="text-sm font-semibold">
-                {person.data.kind === "staff"
-                  ? "Open Moybirr to pay or tip"
-                  : "Open Moybirr to send money"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Sign in to pay{" "}
-                {person.data.full_name?.split(" ")[0] || "this user"} directly from your wallet.
-              </p>
-              <Button asChild className="w-full" size="lg">
-                <Link to="/auth">Open Moybirr</Link>
-              </Button>
             </Card>
           </>
         )}
