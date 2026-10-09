@@ -48,7 +48,9 @@ function createSupabaseClient() {
       fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY),
     },
     auth: {
-      storage: typeof window !== 'undefined' ? localStorage : undefined,
+      // CHANGED: sessionStorage clears when the browser tab closes,
+      // so users must log in again next time they open the app.
+      storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
       persistSession: true,
       autoRefreshToken: true,
     }
