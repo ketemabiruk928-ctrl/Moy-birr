@@ -114,27 +114,45 @@ function PayPage() {
 
   const { status, locate } = useMyLocation();
 
-  // ------------------------------------------------------------
-  // SECURITY: Only fetch hotels on exact name / code / phone match
-  // Requires at least 3 characters before querying
-  // ------------------------------------------------------------
   const trimmedQuery = hotelQuery.trim();
 
+  // Robust search: tries code, then name, then phone — safely
   const hotelSearch = useQuery({
     queryKey: ["hotel-search-exact", trimmedQuery.toUpperCase()],
     enabled: trimmedQuery.length >= 3,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const q = trimmedQuery;
+      const qUpper = trimmedQuery.toUpperCase();
+
+      // 1. Try exact hotel_code match (case-insensitive)
+      const codeRes = await supabase
         .from("hotels_public")
-        .select("id,name,city,hotel_code,phone")
-        .or(
-          `hotel_code.ilike.${trimmedQuery},` +
-            `name.ilike.${trimmedQuery},` +
-            `phone.ilike.${trimmedQuery}`,
-        )
+        .select("id,name,city,hotel_code")
+        .ilike("hotel_code", qUpper)
         .limit(1);
-      if (error) throw error;
-      return data ?? [];
+      if (codeRes.data && codeRes.data.length > 0) return codeRes.data;
+
+      // 2. Try exact name match (case-insensitive)
+      const nameRes = await supabase
+        .from("hotels_public")
+        .select("id,name,city,hotel_code")
+        .ilike("name", q)
+        .limit(1);
+      if (nameRes.data && nameRes.data.length > 0) return nameRes.data;
+
+      // 3. Try phone match (safe — column exists in your DB)
+      try {
+        const phoneRes = await supabase
+          .from("hotels_public")
+          .select("id,name,city,hotel_code")
+          .ilike("phone", q)
+          .limit(1);
+        if (phoneRes.data && phoneRes.data.length > 0) return phoneRes.data;
+      } catch {
+        /* phone column might not exist in this view */
+      }
+
+      return [];
     },
   });
 
@@ -145,9 +163,6 @@ function PayPage() {
     !hotelSearch.isLoading &&
     hotelResults.length === 0;
 
-  // ------------------------------------------------------------
-  // Staff list — scoped to the selected hotel only
-  // ------------------------------------------------------------
   const staff = useQuery({
     queryKey: ["staff-public", hotelId],
     enabled: !!hotelId,
@@ -320,10 +335,6 @@ function PayPage() {
     });
   })();
 
-  // ------------------------------------------------------------
-  // Display value for the hotel search bar
-  // Shows hotel name when selected, otherwise shows typed query
-  // ------------------------------------------------------------
   const displayValue =
     selectedHotel && !showHotelSearch
       ? `${selectedHotel.name}${selectedHotel.city ? " · " + selectedHotel.city : ""}`
@@ -366,7 +377,6 @@ function PayPage() {
                   : t("pay_page.use_gps")}
           </button>
 
-          {/* ---------------- HOTEL SEARCH ---------------- */}
           <div className="mt-4 space-y-2">
             <Label>{t("pay_page.hotel_label")}</Label>
 
@@ -386,7 +396,6 @@ function PayPage() {
                 placeholder={t("pay_page.hotel_search_placeholder")}
               />
 
-              {/* Clear button — shows when a hotel is selected */}
               {selectedHotel && !showHotelSearch ? (
                 <button
                   type="button"
@@ -405,7 +414,6 @@ function PayPage() {
               ) : null}
             </div>
 
-            {/* Dropdown of matches — appears only while typing */}
             {showHotelSearch ? (
               <div className="space-y-2">
                 {trimmedQuery.length > 0 && trimmedQuery.length < 3 ? (
@@ -414,7 +422,11 @@ function PayPage() {
                   </p>
                 ) : null}
 
-                {showingNoMatch ? (
+                {hotelSearch.isLoading && trimmedQuery.length >= 3 ? (
+                  <p className="text-xs text-muted-foreground">Searching…</p>
+                ) : null}
+
+                {showingNoMatch && !hotelSearch.isLoading ? (
                   <p className="text-xs text-muted-foreground">
                     {t("pay_page.no_hotel_match")}
                   </p>
