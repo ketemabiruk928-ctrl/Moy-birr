@@ -124,7 +124,7 @@ function PayPage() {
 
   const trimmedQuery = hotelQuery.trim();
 
-  // Robust search: try code, then name, then phone
+  // Hotel search — try code, then name, then phone
   const hotelSearch = useQuery({
     queryKey: ["hotel-search-exact", trimmedQuery.toUpperCase()],
     enabled: trimmedQuery.length >= 3,
@@ -132,7 +132,6 @@ function PayPage() {
       const q = trimmedQuery;
       const qUpper = trimmedQuery.toUpperCase();
 
-      // 1. Exact hotel_code
       const codeRes = await supabase
         .from("hotels_public")
         .select("id,name,city,hotel_code")
@@ -140,7 +139,6 @@ function PayPage() {
         .limit(1);
       if (codeRes.data && codeRes.data.length > 0) return codeRes.data;
 
-      // 2. Exact name
       const nameRes = await supabase
         .from("hotels_public")
         .select("id,name,city,hotel_code")
@@ -148,7 +146,6 @@ function PayPage() {
         .limit(1);
       if (nameRes.data && nameRes.data.length > 0) return nameRes.data;
 
-      // 3. Phone (safe)
       try {
         const phoneRes = await supabase
           .from("hotels_public")
@@ -331,7 +328,7 @@ function PayPage() {
     }
   };
 
-  // Filter staff list — if nothing typed, show all
+  // Filter staff list
   const staffResults = (() => {
     const q = staffName.trim().toLowerCase();
     const all = staff.data ?? [];
@@ -345,7 +342,7 @@ function PayPage() {
     });
   })();
 
-  // Display value: shows selected hotel name, otherwise typed query
+  // Display value for hotel input
   const displayValue =
     selectedHotelData && !showHotelSearch
       ? `${selectedHotelData.name}${
