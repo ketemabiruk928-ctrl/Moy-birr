@@ -9,45 +9,45 @@ import { useLang } from "@/lib/i18n";
 /**
  * Build the URL encoded in a QR code.
  *
- * All QRs point at /c/<code>, where <code> is the Moybirr ID:
- *   guest  → MG-000123
- *   owner  → MO-000045
- *   staff  → MS-000042
- *   hotel  → MH-000001
+ * Moybirr uses ONE QR code type: the hotel QR.
+ * Every hotel QR points at /c/<hotel_code>, where hotel_code = MH-XXXXXX.
+ * The /c/MH-XXXXXX page shows the hotel's payment form (bill + tip + staff picker).
  *
- * The /c/$code page shows only safe info per role. Never phone numbers,
- * GPS, or wallet data.
+ * Staff are found by typing their Moybirr ID on that page — they do NOT
+ * have their own QR codes.
  */
 export function buildPayLink({
   hotelCode,
-  staffCode,
   origin,
 }: {
   hotelCode?: string | null | undefined;
-  staffCode?: string | null | undefined;
   origin: string;
 }) {
-  if (staffCode) return `${origin}/c/${staffCode}`;
-  if (hotelCode) return `${origin}/c/${hotelCode}`;
-  return `${origin}/`;
+  const code = (hotelCode ?? "").trim().toUpperCase();
+  if (!code) return `${origin}/`;
+
+  // Enforce MH- prefix only
+  if (!code.startsWith("MH-")) return `${origin}/`;
+
+  return `${origin}/c/${code}`;
 }
 
 export function TipQr({
   title,
   description,
   hotelCode,
-  staffCode,
 }: {
   title: string;
   description: string;
   hotelCode?: string | null | undefined;
-  staffCode?: string | null | undefined;
 }) {
   const { t } = useLang();
   const [origin] = useState(() =>
-    typeof window !== "undefined" ? window.location.origin : "https://moy-birr.vercel.app",
+    typeof window !== "undefined"
+      ? window.location.origin
+      : "https://moy-birr.vercel.app",
   );
-  const link = buildPayLink({ hotelCode, staffCode, origin });
+  const link = buildPayLink({ hotelCode, origin });
 
   const copy = async () => {
     try {
@@ -79,6 +79,9 @@ export function TipQr({
       <div className="mx-auto w-fit rounded-2xl bg-card p-3 ring-1 ring-border">
         <QRCodeSVG value={link} size={168} level="M" marginSize={1} />
       </div>
+      <p className="font-mono text-[11px] text-muted-foreground">
+        {link.replace(/^https?:\/\//, "")}
+      </p>
       <div className="flex gap-2">
         <Button variant="outline" size="sm" className="flex-1" onClick={() => void copy()}>
           <Copy className="mr-2 size-4" />
