@@ -63,6 +63,7 @@ function HotelPaymentPage() {
   const [staffMoybirrId, setStaffMoybirrId] = useState<string | null>(null);
   const [staffRating, setStaffRating] = useState<number | null>(null);
   const [staffRatingCount, setStaffRatingCount] = useState<number>(0);
+  const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
 
   const billNum = Number(bill || 0);
@@ -81,17 +82,21 @@ function HotelPaymentPage() {
       setStaffRating(null);
       setStaffRatingCount(0);
       setLookupError(null);
+      setLookupBusy(false);
       return;
     }
+
+    setLookupBusy(true);
+    setLookupError(null);
 
     const handle = setTimeout(async () => {
       const q = raw.toUpperCase();
 
-      // Direct query to staff_public
+      // Query staff_public — case-insensitive match on moybirr_id OR full_name
       const { data, error } = await supabase
         .from("staff_public")
         .select("id, full_name, moybirr_id, position, rating, rating_count")
-        .or(`moybirr_id.eq.${q},full_name.ilike.%${raw}%`)
+        .or(`moybirr_id.ilike.${q},full_name.ilike.%${raw}%`)
         .limit(1);
 
       if (error) {
@@ -102,6 +107,7 @@ function HotelPaymentPage() {
         setStaffRating(null);
         setStaffRatingCount(0);
         setLookupError(`Error: ${error.message}`);
+        setLookupBusy(false);
         return;
       }
 
@@ -114,6 +120,7 @@ function HotelPaymentPage() {
         setStaffRating(null);
         setStaffRatingCount(0);
         setLookupError("No staff found with that ID or name.");
+        setLookupBusy(false);
         return;
       }
 
@@ -123,7 +130,8 @@ function HotelPaymentPage() {
       setStaffRating(row.rating != null ? Number(row.rating) : 0);
       setStaffRatingCount(Number(row.rating_count ?? 0));
       setLookupError(null);
-    }, 400);
+      setLookupBusy(false);
+    }, 500);
 
     return () => clearTimeout(handle);
   }, [staffInput]);
@@ -297,16 +305,23 @@ function HotelPaymentPage() {
             <Input
               id="staff"
               value={staffInput}
-              onChange={(e) => setStaffInput(e.target.value)}
-              placeholder="MS-000006"
+              onChange={(e) => setStaffInput(e.target.value.toUpperCase())}
+              placeholder="MS-000007"
               autoComplete="off"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
             />
+
+            {lookupBusy ? (
+              <p className="text-xs text-muted-foreground">Looking up…</p>
+            ) : null}
 
             {lookupError ? (
               <p className="text-xs text-destructive">{lookupError}</p>
             ) : null}
 
-            {/* Staff card — shows as soon as lookup succeeds */}
+            {/* Staff card — shows when found */}
             {staffId && staffName ? (
               <div className="flex items-center justify-between rounded-xl border border-primary bg-accent p-3">
                 <div className="flex items-center gap-2">
