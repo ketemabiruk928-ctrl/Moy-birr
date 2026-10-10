@@ -170,6 +170,7 @@ function PayPage() {
     !hotelSearch.isLoading &&
     hotelResults.length === 0;
 
+  // Load all staff for the selected hotel
   const staff = useQuery({
     queryKey: ["staff-public", hotelId],
     enabled: !!hotelId,
@@ -330,10 +331,12 @@ function PayPage() {
     }
   };
 
+  // Filter staff list — if nothing typed, show all
   const staffResults = (() => {
     const q = staffName.trim().toLowerCase();
-    return (staff.data ?? []).filter((s) => {
-      if (!q) return true;
+    const all = staff.data ?? [];
+    if (!q) return all;
+    return all.filter((s) => {
       return (
         (s.full_name ?? "").toLowerCase().includes(q) ||
         (s.position ?? "").toLowerCase().includes(q) ||
@@ -523,47 +526,65 @@ function PayPage() {
 
           <div className="mt-5 space-y-2">
             <Label htmlFor="staff-name">{t("pay_page.staff_id_label")}</Label>
-            <Input
-              id="staff-name"
-              value={staffName}
-              onChange={(e) => setStaffName(e.target.value.toUpperCase())}
-              placeholder={t("pay_page.staff_id_placeholder")}
-            />
-            <div className="grid gap-2">
-              {staffResults.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {(staff.data ?? []).length === 0
-                    ? t("pay_page.no_staff_registered")
-                    : t("pay_page.no_staff_match")}
-                </p>
-              ) : (
-                staffResults.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => {
-                      setStaffId(s.id);
-                      setStaffName(s.moybirr_id ?? s.full_name ?? t("staff_member"));
-                    }}
-                    className={`flex items-center justify-between rounded-xl border p-3 text-left ${
-                      staffId === s.id ? "border-primary bg-accent" : "border-border"
-                    }`}
-                  >
-                    <span>
-                      <span className="text-sm font-medium">
-                        {s.full_name || t("staff_member")}
-                      </span>
-                      <span className="block font-mono text-xs text-muted-foreground">
-                        {s.moybirr_id}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-1 text-xs font-semibold">
-                      <Star className="size-3.5 fill-primary text-primary" />
-                      {Number(s.rating).toFixed(1)}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
+
+            {!hotelId ? (
+              <p className="text-xs text-muted-foreground">
+                Select a hotel first to see its staff.
+              </p>
+            ) : (staff.data ?? []).length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No staff registered for this hotel yet.
+              </p>
+            ) : (
+              <>
+                <Input
+                  id="staff-name"
+                  value={staffName}
+                  onChange={(e) => setStaffName(e.target.value.toUpperCase())}
+                  placeholder={t("pay_page.staff_id_placeholder")}
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+
+                <div className="grid gap-2">
+                  {staffResults.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t("pay_page.no_staff_match")}
+                    </p>
+                  ) : (
+                    staffResults.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          setStaffId(s.id);
+                          setStaffName(s.moybirr_id ?? s.full_name ?? t("staff_member"));
+                        }}
+                        className={`flex items-center justify-between rounded-xl border p-3 text-left transition-colors ${
+                          staffId === s.id
+                            ? "border-primary bg-accent"
+                            : "border-border hover:bg-muted"
+                        }`}
+                      >
+                        <span>
+                          <span className="text-sm font-medium">
+                            {s.full_name || t("staff_member")}
+                          </span>
+                          <span className="block font-mono text-xs text-muted-foreground">
+                            {s.moybirr_id}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-1 text-xs font-semibold">
+                          <Star className="size-3.5 fill-primary text-primary" />
+                          {Number(s.rating ?? 0).toFixed(1)}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="mt-5">
