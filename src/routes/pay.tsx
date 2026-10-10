@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { QrCode, Star, Gift, Navigation, Search, X, UserCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -59,58 +59,56 @@ function PayPage() {
   const qc = useQueryClient();
   const { status, locate } = useMyLocation();
 
-  // -------- Selected hotel + staff --------
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [staff, setStaff] = useState<Staff | null>(null);
 
-  // -------- Hotel search --------
   const [searchQ, setSearchQ] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<Hotel[]>([]);
 
-  // -------- Bill / tip / ratings --------
   const [bill, setBill] = useState("");
   const [tip, setTip] = useState("");
   const [stars, setStars] = useState(0);
   const [hotelStars, setHotelStars] = useState(0);
   const [comment, setComment] = useState("");
 
+  // Staff ID typing
+  const [staffIdInput, setStaffIdInput] = useState("");
+  const [staffLookupBusy, setStaffLookupBusy] = useState(false);
+  const [staffLookupError, setStaffLookupError] = useState<string | null>(null);
+
   const billNum = Number(bill || 0);
   const tipNum = Number(tip || 0);
   const total = billNum + tipNum;
 
-  // -------- Search hotels manually --------
+  // -------- Hotel search --------
   const runSearch = async () => {
     const q = searchQ.trim();
     if (q.length < 3) return;
     setSearching(true);
     const qUpper = q.toUpperCase();
 
-    // Try code first
     const byCode = await supabase
       .from("hotels_public")
       .select("id,name,city,hotel_code")
       .ilike("hotel_code", qUpper)
       .limit(5);
-
     if (byCode.data && byCode.data.length > 0) {
       setSearchResults(byCode.data as Hotel[]);
       setSearching(false);
       return;
     }
 
-    // Then name
     const byName = await supabase
       .from("hotels_public")
       .select("id,name,city,hotel_code")
       .ilike("name", `%${q}%`)
       .limit(5);
-
     setSearchResults((byName.data ?? []) as Hotel[]);
     setSearching(false);
   };
 
-  // -------- Load staff for selected hotel --------
+  // -------- Staff of selected hotel --------
   const staffQuery = useQuery({
     queryKey: ["pay-staff", hotel?.id],
     enabled: !!hotel?.id,
@@ -125,7 +123,55 @@ function PayPage() {
     },
   });
 
-  // -------- Wallet balance --------
+  // -------- Staff ID lookup (debounced) --------
+  useEffect(() => {
+    const q = staffIdInput.trim();
+    if (!q) {
+      setStaffLookupError(null);
+      return;
+    }
+
+    const handle = setTimeout(async () => {
+      setStaffLookupBusy(true);
+      setStaffLookupError(null);
+
+      const qUpper = q.toUpperCase();
+
+      // Try Moybirr ID first
+      const byId = await supabase
+        .from("staff_public")
+        .select("id,full_name,moybirr_id,position,rating,rating_count")
+        .ilike("moybirr_id", qUpper)
+        .limit(1);
+
+      if (byId.data && byId.data.length > 0) {
+        setStaff(byId.data[0] as Staff);
+        setStaffLookupBusy(false);
+        return;
+      }
+
+      // Then name
+      const byName = await supabase
+        .from("staff_public")
+        .select("id,full_name,moybirr_id,position,rating,rating_count")
+        .ilike("full_name", `%${q}%`)
+        .limit(1);
+
+      if (byName.data && byName.data.length > 0) {
+        setStaff(byName.data[0] as Staff);
+        setStaffLookupBusy(false);
+        return;
+      }
+
+      setStaff(null);
+      setStaffLookupError("No staff found with that ID or name.");
+      setStaffLookupBusy(false);
+    }, 500);
+
+    return () => clearTimeout(handle);
+  }, [staffIdInput]);
+
+  // -------- Wallet --------
   const wallet = useQuery({
     queryKey: ["wallet", user?.id],
     queryFn: async () => {
@@ -143,14 +189,17 @@ function PayPage() {
   const pay = useMutation({
     mutationFn: async () => {
       if (!hotel) throw new Error("Select a hotel first");
-      if (billNum <= 0) throw new Error("Enter a bill amount");
-      if (tipNum > 0 && !staff) throw new Error("Select a staff member for the tip");
+      if (billNum <= 0 && tipNum <= 0) {
+        throw new Error("Enter a bill or tip");
+      }
+      // Tip is OPTIONAL. But if tip > 0 and staff is set, tip goes to staff.
+      // If tip > 0 and no staff, tip is ignored (falls back to hotel).
 
       const { error } = await supabase.rpc("pay_service", {
         _hotel_id: hotel.id,
         _staff_profile_id: staff?.id ?? null,
         _amount: billNum,
-        _tip: tipNum,
+        _tip: staff ? tipNum : 0, // only send tip if staff selected
       });
       if (error) throw error;
 
@@ -180,6 +229,7 @@ function PayPage() {
       setHotelStars(0);
       setComment("");
       setStaff(null);
+      setStaffIdInput("");
       void qc.invalidateQueries({ queryKey: ["wallet"] });
       void qc.invalidateQueries({ queryKey: ["transactions"] });
     },
@@ -187,7 +237,6 @@ function PayPage() {
   });
 
   const handleQr = async (text: string) => {
-    // Extract MH-XXXXXX from QR text
     const m = text.match(/MH-\d+/i);
     if (!m) {
       toast.error("This QR code isn't a Moybirr hotel code");
@@ -205,14 +254,11 @@ function PayPage() {
     }
     setHotel(data as Hotel);
     setStaff(null);
+    setStaffIdInput("");
     setSearchQ("");
     setSearchResults([]);
     toast.success(`Hotel set: ${data.name}`);
   };
-
-  // ============================================================
-  // RENDER
-  // ============================================================
 
   return (
     <>
@@ -222,7 +268,7 @@ function PayPage() {
       />
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
-        {/* -------- HOTEL SELECTION -------- */}
+        {/* -------- HOTEL -------- */}
         <Card className="shadow-card p-5">
           <div className="flex items-center gap-3">
             <div className="flex size-12 items-center justify-center rounded-xl bg-accent">
@@ -248,7 +294,6 @@ function PayPage() {
             {status === "locating" ? "Locating…" : "Use my location"}
           </button>
 
-          {/* Selected hotel */}
           {hotel ? (
             <div className="mt-4 flex items-center justify-between rounded-xl border border-primary bg-accent p-3">
               <div>
@@ -262,6 +307,7 @@ function PayPage() {
                 onClick={() => {
                   setHotel(null);
                   setStaff(null);
+                  setStaffIdInput("");
                 }}
                 className="text-muted-foreground hover:text-foreground"
                 aria-label="Clear hotel"
@@ -296,6 +342,7 @@ function PayPage() {
                       onClick={() => {
                         setHotel(h);
                         setStaff(null);
+                        setStaffIdInput("");
                         setSearchQ("");
                         setSearchResults([]);
                       }}
@@ -316,7 +363,6 @@ function PayPage() {
 
         {/* -------- BILL + TIP + STAFF -------- */}
         <Card className="shadow-card space-y-4 p-5">
-          {/* Bill */}
           <div className="space-y-1.5">
             <Label htmlFor="bill">Service bill (ETB)</Label>
             <Input
@@ -328,7 +374,6 @@ function PayPage() {
             />
           </div>
 
-          {/* Tip */}
           <div>
             <p className="text-sm font-semibold">
               <Gift className="mr-1.5 inline size-4 text-primary" />
@@ -367,71 +412,131 @@ function PayPage() {
             </div>
           </div>
 
-          {/* -------- STAFF PICKER -------- */}
+          {/* STAFF PICKER */}
           <div>
             <Label>
               Who served you?{" "}
-              {tipNum > 0 ? (
-                <span className="text-destructive">(required for tip)</span>
-              ) : (
-                <span className="font-normal text-muted-foreground">(optional)</span>
-              )}
+              <span className="font-normal text-muted-foreground">
+                (needed only if you add a tip)
+              </span>
             </Label>
 
-            {!hotel ? (
+            {/* Selected staff */}
+            {staff ? (
+              <div className="mt-2 flex items-center justify-between rounded-xl border border-primary bg-accent p-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-9 items-center justify-center rounded-full bg-primary/10">
+                    <UserCircle2 className="size-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {staff.full_name || "Staff"}
+                    </p>
+                    <p className="font-mono text-[10px] text-muted-foreground">
+                      {staff.moybirr_id ?? "—"} · {staff.position ?? "staff"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <Star className="size-3.5 fill-primary text-primary" />
+                    <span className="text-sm font-bold">
+                      {staff.rating != null && Number(staff.rating) > 0
+                        ? Number(staff.rating).toFixed(1)
+                        : "New"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStaff(null);
+                      setStaffIdInput("");
+                    }}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              </div>
+            ) : !hotel ? (
               <p className="mt-2 text-xs text-muted-foreground">
                 Select a hotel first.
               </p>
-            ) : staffQuery.isLoading ? (
-              <p className="mt-2 text-xs text-muted-foreground">Loading staff…</p>
-            ) : (staffQuery.data ?? []).length === 0 ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                No staff registered at this hotel yet.
-              </p>
             ) : (
-              <div className="mt-2 grid gap-2">
-                {(staffQuery.data ?? []).map((s) => {
-                  const isSelected = staff?.id === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => setStaff(isSelected ? null : s)}
-                      className={`flex items-center justify-between rounded-xl border p-3 text-left transition-colors ${
-                        isSelected
-                          ? "border-primary bg-accent"
-                          : "border-border hover:bg-muted"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="flex size-9 items-center justify-center rounded-full bg-primary/10">
-                          <UserCircle2 className="size-5 text-primary" />
+              <>
+                {/* Typed staff ID */}
+                <Input
+                  className="mt-2"
+                  value={staffIdInput}
+                  onChange={(e) =>
+                    setStaffIdInput(e.target.value.toUpperCase())
+                  }
+                  placeholder="Type MS-000010 or staff name"
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+
+                {staffLookupBusy ? (
+                  <p className="mt-1 text-xs text-muted-foreground">Looking up…</p>
+                ) : staffLookupError ? (
+                  <p className="mt-1 text-xs text-destructive">
+                    {staffLookupError}
+                  </p>
+                ) : null}
+
+                {/* Tappable staff cards */}
+                {staffQuery.isLoading ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Loading staff…
+                  </p>
+                ) : (staffQuery.data ?? []).length === 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    No staff registered at this hotel yet.
+                  </p>
+                ) : (
+                  <div className="mt-3 grid gap-2">
+                    {(staffQuery.data ?? []).map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          setStaff(s);
+                          setStaffIdInput(s.moybirr_id ?? "");
+                        }}
+                        className="flex items-center justify-between rounded-xl border border-border p-3 text-left transition-colors hover:bg-muted"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="flex size-9 items-center justify-center rounded-full bg-primary/10">
+                            <UserCircle2 className="size-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold">
+                              {s.full_name || "Staff"}
+                            </p>
+                            <p className="font-mono text-[10px] text-muted-foreground">
+                              {s.moybirr_id ?? "—"} · {s.position ?? "staff"}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-semibold">
-                            {s.full_name || "Staff"}
-                          </p>
-                          <p className="font-mono text-[10px] text-muted-foreground">
-                            {s.moybirr_id ?? "—"} · {s.position ?? "staff"}
-                          </p>
+                        <div className="flex items-center gap-1">
+                          <Star className="size-3.5 fill-primary text-primary" />
+                          <span className="text-sm font-bold">
+                            {s.rating != null && Number(s.rating) > 0
+                              ? Number(s.rating).toFixed(1)
+                              : "New"}
+                          </span>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Star className="size-3.5 fill-primary text-primary" />
-                        <span className="text-sm font-bold">
-                          {s.rating != null && Number(s.rating) > 0
-                            ? Number(s.rating).toFixed(1)
-                            : "New"}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
-          {/* Rate staff (only if selected) */}
+          {/* Rate staff */}
           {staff ? (
             <div className="space-y-1.5">
               <Label>Rate {staff.full_name} (optional)</Label>
@@ -493,34 +598,30 @@ function PayPage() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">
-                Tip → {staff?.full_name ?? "staff"}
+                Tip → {staff?.full_name ?? (tipNum > 0 ? "staff not selected" : "—")}
               </span>
-              <span>{formatETB(tipNum)}</span>
+              <span>{formatETB(staff ? tipNum : 0)}</span>
             </div>
             <div className="mt-2 flex justify-between border-t border-border pt-2 text-base font-bold">
               <span>Total</span>
-              <span>{formatETB(total)}</span>
+              <span>{formatETB(billNum + (staff ? tipNum : 0))}</span>
             </div>
           </div>
 
-          {/* Pay */}
           <Button
             className="w-full"
             size="lg"
-            disabled={
-              pay.isPending ||
-              !hotel ||
-              total <= 0 ||
-              (tipNum > 0 && !staff)
-            }
+            disabled={pay.isPending || !hotel || billNum <= 0}
             onClick={() => pay.mutate()}
           >
-            {pay.isPending ? "Paying…" : `Pay ${formatETB(total)}`}
+            {pay.isPending
+              ? "Paying…"
+              : `Pay ${formatETB(billNum + (staff ? tipNum : 0))}`}
           </Button>
 
           {tipNum > 0 && !staff ? (
-            <Badge variant="destructive" className="mt-2">
-              Select who served you to send the tip
+            <Badge variant="secondary" className="mt-2">
+              Add a tip — but no staff selected, tip will be skipped
             </Badge>
           ) : null}
         </Card>
