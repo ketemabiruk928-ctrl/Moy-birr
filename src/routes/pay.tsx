@@ -122,18 +122,7 @@ function PayPage() {
         .eq("hotel_id", hotel.id)
         .limit(50);
 
-      if (error) {
-        console.error("[staffQuery] error:", error);
-        throw error;
-      }
-
-      console.log(
-        "[staffQuery] hotel:",
-        hotel.id,
-        "found:",
-        data?.length ?? 0,
-        data,
-      );
+      if (error) throw error;
       return (data ?? []) as Staff[];
     },
   });
@@ -421,17 +410,6 @@ function PayPage() {
                 placeholder="0.00"
               />
             </div>
-          </div>
-
-          {/* ⚠️ DEBUG PANEL — remove after fixing */}
-          <div className="rounded bg-yellow-100 p-2 text-[10px] text-black">
-            <p>hotel id: {hotel?.id ?? "none"}</p>
-            <p>staff loading: {String(staffQuery.isLoading)}</p>
-            <p>
-              staff error:{" "}
-              {staffQuery.error ? String(staffQuery.error) : "none"}
-            </p>
-            <p>staff count: {(staffQuery.data ?? []).length}</p>
           </div>
 
           <div>
