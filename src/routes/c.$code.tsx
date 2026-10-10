@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { MapPin, Star, Gift } from "lucide-react";
+import { MapPin, Star, Gift, UserCircle2 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -21,6 +21,15 @@ export const Route = createFileRoute("/c/$code")({
 
 const tipPercents = [5, 10, 15];
 
+type StaffRow = {
+  id: string;
+  full_name: string | null;
+  moybirr_id: string | null;
+  position: string | null;
+  rating: number | null;
+  rating_count: number | null;
+};
+
 function HotelPaymentPage() {
   const { code } = Route.useParams();
   const navigate = useNavigate();
@@ -28,7 +37,7 @@ function HotelPaymentPage() {
 
   const hotelCode = code.toUpperCase();
 
-  // Hotel
+  // -------- Hotel --------
   const hotel = useQuery({
     queryKey: ["public-hotel", hotelCode],
     queryFn: async () => {
@@ -42,92 +51,90 @@ function HotelPaymentPage() {
     },
   });
 
-  // Bill + tip
+  // -------- Bill / tip / rating state --------
   const [bill, setBill] = useState("");
   const [tip, setTip] = useState("");
   const [hotelStars, setHotelStars] = useState(0);
+  const [staffStars, setStaffStars] = useState(0);
 
-  // Staff lookup state
   const [staffInput, setStaffInput] = useState("");
   const [staffId, setStaffId] = useState<string | null>(null);
   const [staffName, setStaffName] = useState<string | null>(null);
+  const [staffMoybirrId, setStaffMoybirrId] = useState<string | null>(null);
   const [staffRating, setStaffRating] = useState<number | null>(null);
   const [staffRatingCount, setStaffRatingCount] = useState<number>(0);
-  const [staffStars, setStaffStars] = useState(0);
-  const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
-
-  const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const billNum = Number(bill || 0);
   const tipNum = Number(tip || 0);
   const total = billNum + tipNum;
 
-  // ------------------------------------------------------------
-  // Staff lookup — single query, no hotel filter (IDs are global)
-  // ------------------------------------------------------------
-  const lookupStaff = async (raw: string) => {
-    const query = raw.trim();
-    if (!query) {
+  // -------- Staff lookup (runs when input changes) --------
+  useEffect(() => {
+    const raw = staffInput.trim();
+
+    // Clear state if empty
+    if (!raw) {
       setStaffId(null);
       setStaffName(null);
+      setStaffMoybirrId(null);
       setStaffRating(null);
       setStaffRatingCount(0);
       setLookupError(null);
       return;
     }
 
-    setLookupBusy(true);
-    setLookupError(null);
+    const handle = setTimeout(async () => {
+      const q = raw.toUpperCase();
 
-    const asId = query.toUpperCase();
+      // Direct query to staff_public
+      const { data, error } = await supabase
+        .from("staff_public")
+        .select("id, full_name, moybirr_id, position, rating, rating_count")
+        .or(`moybirr_id.eq.${q},full_name.ilike.%${raw}%`)
+        .limit(1);
 
-    const { data, error } = await supabase
-      .from("staff_public")
-      .select("id, full_name, moybirr_id, position, rating, rating_count")
-      .or(`moybirr_id.eq.${asId},full_name.ilike.%${query}%`)
-      .limit(1);
+      if (error) {
+        console.error("staff lookup error:", error);
+        setStaffId(null);
+        setStaffName(null);
+        setStaffMoybirrId(null);
+        setStaffRating(null);
+        setStaffRatingCount(0);
+        setLookupError(`Error: ${error.message}`);
+        return;
+      }
 
-    if (error) {
-      console.error("staff lookup error:", error);
-      setStaffId(null);
-      setStaffName(null);
-      setStaffRating(null);
-      setStaffRatingCount(0);
-      setLookupError("Lookup failed. Please try again.");
-      setLookupBusy(false);
-      return;
-    }
+      const row = (data?.[0] ?? null) as StaffRow | null;
 
-    if (data && data[0]) {
-      setStaffId(data[0].id);
-      setStaffName(data[0].full_name || data[0].moybirr_id || "Staff");
-      setStaffRating(Number(data[0].rating ?? 0));
-      setStaffRatingCount(Number(data[0].rating_count ?? 0));
+      if (!row) {
+        setStaffId(null);
+        setStaffName(null);
+        setStaffMoybirrId(null);
+        setStaffRating(null);
+        setStaffRatingCount(0);
+        setLookupError("No staff found with that ID or name.");
+        return;
+      }
+
+      setStaffId(row.id);
+      setStaffName(row.full_name ?? "Staff");
+      setStaffMoybirrId(row.moybirr_id ?? null);
+      setStaffRating(row.rating != null ? Number(row.rating) : 0);
+      setStaffRatingCount(Number(row.rating_count ?? 0));
       setLookupError(null);
-    } else {
-      setStaffId(null);
-      setStaffName(null);
-      setStaffRating(null);
-      setStaffRatingCount(0);
-      setLookupError("No staff found with that ID or name.");
-    }
-    setLookupBusy(false);
-  };
+    }, 400);
 
-  // ------------------------------------------------------------
-  // Pay
-  // ------------------------------------------------------------
+    return () => clearTimeout(handle);
+  }, [staffInput]);
+
+  // -------- Payment --------
   const pay = useMutation({
     mutationFn: async () => {
       if (!hotel.data) throw new Error("Hotel not found");
-      if (billNum <= 0 && tipNum <= 0) {
-        throw new Error("Enter a bill amount or tip");
-      }
+      if (billNum <= 0 && tipNum <= 0) throw new Error("Enter a bill or tip");
       if (tipNum > 0 && !staffId) {
-        throw new Error(
-          "Enter the staff ID or name so we can send the tip to the right person.",
-        );
+        throw new Error("Enter the staff ID first");
       }
 
       const { error } = await supabase.rpc("pay_service", {
@@ -159,16 +166,12 @@ function HotelPaymentPage() {
     onSuccess: () => {
       toast.success(
         tipNum > 0
-          ? `Paid ${formatETB(billNum)} to hotel + ${formatETB(tipNum)} tip sent to ${staffName}.`
+          ? `Paid ${formatETB(billNum)} to ${hotel.data?.name} · ${formatETB(tipNum)} tip sent to ${staffName}.`
           : `Paid ${formatETB(billNum)} to ${hotel.data?.name}.`,
       );
       setBill("");
       setTip("");
       setStaffInput("");
-      setStaffId(null);
-      setStaffName(null);
-      setStaffRating(null);
-      setStaffRatingCount(0);
       setStaffStars(0);
       setHotelStars(0);
     },
@@ -188,7 +191,7 @@ function HotelPaymentPage() {
     pay.mutate();
   };
 
-  // Loading
+  // -------- Render --------
   if (hotel.isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -197,7 +200,6 @@ function HotelPaymentPage() {
     );
   }
 
-  // Not found
   if (!hotel.data) {
     return (
       <div className="min-h-screen bg-background">
@@ -289,62 +291,41 @@ function HotelPaymentPage() {
             </div>
           </div>
 
-          {/* Staff lookup */}
+          {/* Staff ID */}
           <div className="space-y-1.5">
-            <Label htmlFor="staff">
-              Staff ID or name (required if you add a tip)
-            </Label>
+            <Label htmlFor="staff">Staff Moybirr ID</Label>
             <Input
               id="staff"
               value={staffInput}
-              onChange={(e) => {
-                const value = e.target.value;
-                setStaffInput(value);
-                setStaffId(null);
-                setStaffName(null);
-                setStaffRating(null);
-                setStaffRatingCount(0);
-                setLookupError(null);
-
-                if (lookupTimer.current) clearTimeout(lookupTimer.current);
-                lookupTimer.current = setTimeout(() => {
-                  void lookupStaff(value);
-                }, 400);
-              }}
-              placeholder="MS-000006 or Helen"
+              onChange={(e) => setStaffInput(e.target.value)}
+              placeholder="MS-000006"
+              autoComplete="off"
             />
-
-            {lookupBusy ? (
-              <p className="text-xs text-muted-foreground">Looking up…</p>
-            ) : null}
 
             {lookupError ? (
               <p className="text-xs text-destructive">{lookupError}</p>
             ) : null}
 
-            {/* Staff found — show name + rating */}
+            {/* Staff card — shows as soon as lookup succeeds */}
             {staffId && staffName ? (
               <div className="flex items-center justify-between rounded-xl border border-primary bg-accent p-3">
                 <div className="flex items-center gap-2">
                   <div className="flex size-9 items-center justify-center rounded-full bg-primary/10">
-                    <span className="text-sm font-bold text-primary">
-                      {staffName.charAt(0).toUpperCase()}
-                    </span>
+                    <UserCircle2 className="size-5 text-primary" />
                   </div>
                   <div>
                     <p className="text-sm font-semibold">{staffName}</p>
                     <p className="font-mono text-[10px] text-muted-foreground">
-                      {staffId ? "✓ Verified staff" : ""}
+                      {staffMoybirrId ?? "—"}
                     </p>
                   </div>
                 </div>
 
-                {/* THE STAFF RATING */}
                 <div className="flex items-center gap-1">
                   <Star className="size-4 fill-primary text-primary" />
                   <span className="text-sm font-bold">
                     {staffRating != null && staffRating > 0
-                      ? staffRating.toFixed(1)
+                      ? Number(staffRating).toFixed(1)
                       : "New"}
                   </span>
                   {staffRatingCount > 0 ? (
@@ -354,14 +335,10 @@ function HotelPaymentPage() {
                   ) : null}
                 </div>
               </div>
-            ) : tipNum > 0 ? (
-              <p className="text-xs text-destructive">
-                Enter the staff ID or name to send them the tip.
-              </p>
             ) : null}
           </div>
 
-          {/* Rate staff — only after found */}
+          {/* Rate staff */}
           {staffId ? (
             <div className="space-y-1.5">
               <Label>Rate {staffName} (optional)</Label>
@@ -427,7 +404,7 @@ function HotelPaymentPage() {
             </div>
           </div>
 
-          {/* Pay button */}
+          {/* Pay */}
           <Button
             className="w-full"
             size="lg"
@@ -443,8 +420,7 @@ function HotelPaymentPage() {
 
           {!user ? (
             <p className="text-center text-[11px] text-muted-foreground">
-              You'll need a free Moybirr account to complete payment. It takes
-              30 seconds.
+              You'll need a free Moybirr account to complete payment.
             </p>
           ) : null}
         </Card>
