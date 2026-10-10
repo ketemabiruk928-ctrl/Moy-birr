@@ -28,7 +28,7 @@ function HotelPaymentPage() {
 
   const hotelCode = code.toUpperCase();
 
-  // Load hotel from the public view
+  // Hotel
   const hotel = useQuery({
     queryKey: ["public-hotel", hotelCode],
     queryFn: async () => {
@@ -42,7 +42,7 @@ function HotelPaymentPage() {
     },
   });
 
-  // Bill + tip state
+  // Bill + tip
   const [bill, setBill] = useState("");
   const [tip, setTip] = useState("");
   const [hotelStars, setHotelStars] = useState(0);
@@ -51,11 +51,12 @@ function HotelPaymentPage() {
   const [staffInput, setStaffInput] = useState("");
   const [staffId, setStaffId] = useState<string | null>(null);
   const [staffName, setStaffName] = useState<string | null>(null);
+  const [staffRating, setStaffRating] = useState<number | null>(null);
+  const [staffRatingCount, setStaffRatingCount] = useState<number>(0);
   const [staffStars, setStaffStars] = useState(0);
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
 
-  // Debounce timer for staff lookup
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const billNum = Number(bill || 0);
@@ -63,17 +64,15 @@ function HotelPaymentPage() {
   const total = billNum + tipNum;
 
   // ------------------------------------------------------------
-  // Look up staff member by Moybirr ID (MS-XXXXXX) or name.
-  // Uses only columns that exist in staff_public:
-  // id, full_name, moybirr_id, position, rating
+  // Staff lookup — single query, no hotel filter (IDs are global)
   // ------------------------------------------------------------
   const lookupStaff = async (raw: string) => {
-    if (!hotel.data) return;
-
     const query = raw.trim();
     if (!query) {
       setStaffId(null);
       setStaffName(null);
+      setStaffRating(null);
+      setStaffRatingCount(0);
       setLookupError(null);
       return;
     }
@@ -81,54 +80,43 @@ function HotelPaymentPage() {
     setLookupBusy(true);
     setLookupError(null);
 
-    // 1. Try exact Moybirr ID
     const asId = query.toUpperCase();
-    const { data: byId, error: idErr } = await supabase
+
+    const { data, error } = await supabase
       .from("staff_public")
-      .select("id, full_name, moybirr_id, position, rating")
-      .eq("hotel_id", hotel.data.id)
-      .eq("moybirr_id", asId)
-      .maybeSingle();
-
-    if (idErr) {
-      console.error("staff lookup error:", idErr);
-    }
-
-    if (byId) {
-      setStaffId(byId.id);
-      setStaffName(byId.full_name || byId.moybirr_id || "Staff");
-      setLookupBusy(false);
-      return;
-    }
-
-    // 2. Try name match (case-insensitive, partial)
-    const { data: byName, error: nameErr } = await supabase
-      .from("staff_public")
-      .select("id, full_name, moybirr_id, position, rating")
-      .eq("hotel_id", hotel.data.id)
-      .ilike("full_name", `%${query}%`)
+      .select("id, full_name, moybirr_id, position, rating, rating_count")
+      .or(`moybirr_id.eq.${asId},full_name.ilike.%${query}%`)
       .limit(1);
 
-    if (nameErr) {
-      console.error("staff name lookup error:", nameErr);
-    }
-
-    if (byName && byName[0]) {
-      setStaffId(byName[0].id);
-      setStaffName(byName[0].full_name || "Staff");
+    if (error) {
+      console.error("staff lookup error:", error);
+      setStaffId(null);
+      setStaffName(null);
+      setStaffRating(null);
+      setStaffRatingCount(0);
+      setLookupError("Lookup failed. Please try again.");
       setLookupBusy(false);
       return;
     }
 
-    // 3. Not found
-    setStaffId(null);
-    setStaffName(null);
-    setLookupError("No staff found with that ID or name at this hotel.");
+    if (data && data[0]) {
+      setStaffId(data[0].id);
+      setStaffName(data[0].full_name || data[0].moybirr_id || "Staff");
+      setStaffRating(Number(data[0].rating ?? 0));
+      setStaffRatingCount(Number(data[0].rating_count ?? 0));
+      setLookupError(null);
+    } else {
+      setStaffId(null);
+      setStaffName(null);
+      setStaffRating(null);
+      setStaffRatingCount(0);
+      setLookupError("No staff found with that ID or name.");
+    }
     setLookupBusy(false);
   };
 
   // ------------------------------------------------------------
-  // Pay: bill goes to hotel, tip goes to specific staff member
+  // Pay
   // ------------------------------------------------------------
   const pay = useMutation({
     mutationFn: async () => {
@@ -150,7 +138,6 @@ function HotelPaymentPage() {
       });
       if (error) throw error;
 
-      // Optional staff rating
       if (staffId && staffStars > 0) {
         await supabase.rpc("rate_staff", {
           _staff_profile_id: staffId,
@@ -160,7 +147,6 @@ function HotelPaymentPage() {
         });
       }
 
-      // Optional hotel rating
       if (hotelStars > 0 && user) {
         await supabase.from("hotel_ratings").insert({
           guest_id: user.id,
@@ -181,6 +167,8 @@ function HotelPaymentPage() {
       setStaffInput("");
       setStaffId(null);
       setStaffName(null);
+      setStaffRating(null);
+      setStaffRatingCount(0);
       setStaffStars(0);
       setHotelStars(0);
     },
@@ -200,9 +188,7 @@ function HotelPaymentPage() {
     pay.mutate();
   };
 
-  // ----------------------------------------
   // Loading
-  // ----------------------------------------
   if (hotel.isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -211,9 +197,7 @@ function HotelPaymentPage() {
     );
   }
 
-  // ----------------------------------------
   // Not found
-  // ----------------------------------------
   if (!hotel.data) {
     return (
       <div className="min-h-screen bg-background">
@@ -238,9 +222,6 @@ function HotelPaymentPage() {
     );
   }
 
-  // ----------------------------------------
-  // Payment page
-  // ----------------------------------------
   return (
     <div className="min-h-screen bg-background">
       <div className="bg-gradient-primary px-6 pt-14 pb-12 text-primary-foreground">
@@ -308,7 +289,7 @@ function HotelPaymentPage() {
             </div>
           </div>
 
-          {/* Staff lookup — auto-triggers as you type */}
+          {/* Staff lookup */}
           <div className="space-y-1.5">
             <Label htmlFor="staff">
               Staff ID or name (required if you add a tip)
@@ -321,6 +302,8 @@ function HotelPaymentPage() {
                 setStaffInput(value);
                 setStaffId(null);
                 setStaffName(null);
+                setStaffRating(null);
+                setStaffRatingCount(0);
                 setLookupError(null);
 
                 if (lookupTimer.current) clearTimeout(lookupTimer.current);
@@ -330,14 +313,47 @@ function HotelPaymentPage() {
               }}
               placeholder="MS-000006 or Helen"
             />
+
             {lookupBusy ? (
               <p className="text-xs text-muted-foreground">Looking up…</p>
-            ) : lookupError ? (
+            ) : null}
+
+            {lookupError ? (
               <p className="text-xs text-destructive">{lookupError}</p>
-            ) : staffId && staffName ? (
-              <p className="text-xs text-success">
-                ✓ Tipping <strong>{staffName}</strong>
-              </p>
+            ) : null}
+
+            {/* Staff found — show name + rating */}
+            {staffId && staffName ? (
+              <div className="flex items-center justify-between rounded-xl border border-primary bg-accent p-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-9 items-center justify-center rounded-full bg-primary/10">
+                    <span className="text-sm font-bold text-primary">
+                      {staffName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{staffName}</p>
+                    <p className="font-mono text-[10px] text-muted-foreground">
+                      {staffId ? "✓ Verified staff" : ""}
+                    </p>
+                  </div>
+                </div>
+
+                {/* THE STAFF RATING */}
+                <div className="flex items-center gap-1">
+                  <Star className="size-4 fill-primary text-primary" />
+                  <span className="text-sm font-bold">
+                    {staffRating != null && staffRating > 0
+                      ? staffRating.toFixed(1)
+                      : "New"}
+                  </span>
+                  {staffRatingCount > 0 ? (
+                    <span className="text-[10px] text-muted-foreground">
+                      ({staffRatingCount})
+                    </span>
+                  ) : null}
+                </div>
+              </div>
             ) : tipNum > 0 ? (
               <p className="text-xs text-destructive">
                 Enter the staff ID or name to send them the tip.
@@ -345,7 +361,7 @@ function HotelPaymentPage() {
             ) : null}
           </div>
 
-          {/* Staff rating — only appears once staff resolved */}
+          {/* Rate staff — only after found */}
           {staffId ? (
             <div className="space-y-1.5">
               <Label>Rate {staffName} (optional)</Label>
