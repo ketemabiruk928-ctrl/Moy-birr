@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { MapPin, Star, Gift } from "lucide-react";
 
@@ -34,7 +34,7 @@ function HotelPaymentPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("hotels_public")
-        .select("*")
+        .select("id, name, city, subcity, hotel_code")
         .eq("hotel_code", hotelCode)
         .maybeSingle();
       if (error) throw error;
@@ -55,14 +55,17 @@ function HotelPaymentPage() {
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
 
+  // Debounce timer for staff lookup
+  const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const billNum = Number(bill || 0);
   const tipNum = Number(tip || 0);
   const total = billNum + tipNum;
 
   // ------------------------------------------------------------
-  // Look up the staff member by Moybirr ID (MS-XXXXXX) or name.
-  // Scoped to the hotel from the QR code so guests can't tip staff
-  // from a different hotel by mistake.
+  // Look up staff member by Moybirr ID (MS-XXXXXX) or name.
+  // Uses only columns that exist in staff_public:
+  // id, full_name, moybirr_id, position, rating
   // ------------------------------------------------------------
   const lookupStaff = async (raw: string) => {
     if (!hotel.data) return;
@@ -80,12 +83,16 @@ function HotelPaymentPage() {
 
     // 1. Try exact Moybirr ID
     const asId = query.toUpperCase();
-    const { data: byId } = await supabase
+    const { data: byId, error: idErr } = await supabase
       .from("staff_public")
-      .select("id, full_name, moybirr_id")
+      .select("id, full_name, moybirr_id, position, rating")
       .eq("hotel_id", hotel.data.id)
       .eq("moybirr_id", asId)
       .maybeSingle();
+
+    if (idErr) {
+      console.error("staff lookup error:", idErr);
+    }
 
     if (byId) {
       setStaffId(byId.id);
@@ -95,12 +102,16 @@ function HotelPaymentPage() {
     }
 
     // 2. Try name match (case-insensitive, partial)
-    const { data: byName } = await supabase
+    const { data: byName, error: nameErr } = await supabase
       .from("staff_public")
-      .select("id, full_name, moybirr_id")
+      .select("id, full_name, moybirr_id, position, rating")
       .eq("hotel_id", hotel.data.id)
       .ilike("full_name", `%${query}%`)
       .limit(1);
+
+    if (nameErr) {
+      console.error("staff name lookup error:", nameErr);
+    }
 
     if (byName && byName[0]) {
       setStaffId(byName[0].id);
@@ -117,7 +128,7 @@ function HotelPaymentPage() {
   };
 
   // ------------------------------------------------------------
-  // Pay: sends bill to hotel, tip to the specific staff member
+  // Pay: bill goes to hotel, tip goes to specific staff member
   // ------------------------------------------------------------
   const pay = useMutation({
     mutationFn: async () => {
@@ -131,7 +142,6 @@ function HotelPaymentPage() {
         );
       }
 
-      // 1. Pay the service bill + tip via the RPC
       const { error } = await supabase.rpc("pay_service", {
         _hotel_id: hotel.data.id,
         _staff_profile_id: staffId,
@@ -140,7 +150,7 @@ function HotelPaymentPage() {
       });
       if (error) throw error;
 
-      // 2. Optional: rate the staff member
+      // Optional staff rating
       if (staffId && staffStars > 0) {
         await supabase.rpc("rate_staff", {
           _staff_profile_id: staffId,
@@ -150,7 +160,7 @@ function HotelPaymentPage() {
         });
       }
 
-      // 3. Optional: rate the hotel
+      // Optional hotel rating
       if (hotelStars > 0 && user) {
         await supabase.from("hotel_ratings").insert({
           guest_id: user.id,
@@ -216,7 +226,9 @@ function HotelPaymentPage() {
             <p className="text-sm text-muted-foreground">
               This QR code doesn't match a Moybirr hotel.
             </p>
-            <p className="mt-3 font-mono text-xs text-muted-foreground">{hotelCode}</p>
+            <p className="mt-3 font-mono text-xs text-muted-foreground">
+              {hotelCode}
+            </p>
             <Button asChild className="mt-4 w-full">
               <Link to="/">Back to home</Link>
             </Button>
@@ -296,19 +308,26 @@ function HotelPaymentPage() {
             </div>
           </div>
 
-          {/* Staff lookup */}
+          {/* Staff lookup — auto-triggers as you type */}
           <div className="space-y-1.5">
-            <Label htmlFor="staff">Staff ID or name (required if you add a tip)</Label>
+            <Label htmlFor="staff">
+              Staff ID or name (required if you add a tip)
+            </Label>
             <Input
               id="staff"
               value={staffInput}
               onChange={(e) => {
-                setStaffInput(e.target.value);
+                const value = e.target.value;
+                setStaffInput(value);
                 setStaffId(null);
                 setStaffName(null);
                 setLookupError(null);
+
+                if (lookupTimer.current) clearTimeout(lookupTimer.current);
+                lookupTimer.current = setTimeout(() => {
+                  void lookupStaff(value);
+                }, 400);
               }}
-              onBlur={(e) => void lookupStaff(e.target.value)}
               placeholder="MS-000006 or Helen"
             />
             {lookupBusy ? (
@@ -326,7 +345,7 @@ function HotelPaymentPage() {
             ) : null}
           </div>
 
-          {/* Staff rating — only if staff is resolved */}
+          {/* Staff rating — only appears once staff resolved */}
           {staffId ? (
             <div className="space-y-1.5">
               <Label>Rate {staffName} (optional)</Label>
@@ -336,6 +355,7 @@ function HotelPaymentPage() {
                     key={n}
                     type="button"
                     onClick={() => setStaffStars(staffStars === n ? 0 : n)}
+                    className="p-0.5"
                   >
                     <Star
                       className={`size-7 ${
@@ -359,6 +379,7 @@ function HotelPaymentPage() {
                   key={n}
                   type="button"
                   onClick={() => setHotelStars(hotelStars === n ? 0 : n)}
+                  className="p-0.5"
                 >
                   <Star
                     className={`size-7 ${
@@ -406,8 +427,8 @@ function HotelPaymentPage() {
 
           {!user ? (
             <p className="text-center text-[11px] text-muted-foreground">
-              You'll need a free Moybirr account to complete payment. It takes 30
-              seconds.
+              You'll need a free Moybirr account to complete payment. It takes
+              30 seconds.
             </p>
           ) : null}
         </Card>
