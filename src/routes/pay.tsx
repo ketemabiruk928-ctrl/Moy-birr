@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { QrCode, Star, Gift, Navigation, Search, X } from "lucide-react";
+import { QrCode, Star, Gift, Navigation, Search, X, UserCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { formatETB, useLang } from "@/lib/i18n";
@@ -16,22 +16,13 @@ import { QrScanButton } from "@/components/QrScanner";
 import { useMyLocation } from "@/lib/geo";
 
 export const Route = createFileRoute("/pay")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    hotel: typeof search["hotel"] === "string" ? search["hotel"] : undefined,
-    staff: typeof search["staff"] === "string" ? search["staff"] : undefined,
-  }),
   head: () => ({
     meta: [
       { title: "Scan, Pay & Tip — Moybirr" },
       {
         name: "description",
         content:
-          "Scan a hotel or restaurant QR code, pay the service bill from your Moybirr wallet and add a tip that goes 100% to the staff member who served you.",
-      },
-      { property: "og:title", content: "QR Payment & Tipping — Moybirr" },
-      {
-        property: "og:description",
-        content: "Pay the bill and tip your waiter, receptionist or housekeeper instantly.",
+          "Scan a hotel or restaurant QR code, pay the service bill and tip the staff member who served you.",
       },
     ],
   }),
@@ -46,142 +37,95 @@ export const Route = createFileRoute("/pay")({
 
 const tipPercents = [5, 10, 15];
 
-type ParsedQr =
-  | { kind: "hotel"; code: string }
-  | { kind: "staff"; code: string }
-  | { kind: "person"; code: string }
-  | null;
-
-type HotelOption = {
+type Hotel = {
   id: string;
   name: string;
   city: string | null;
   hotel_code: string | null;
 };
 
-function parseQrValue(raw: string): ParsedQr {
-  const text = raw.trim();
-  if (!text) return null;
-
-  try {
-    const url = new URL(text);
-    const path = url.pathname.replace(/\/+$/, "");
-
-    const cMatch = path.match(/\/c\/([A-Za-z]{2}-\d+)$/);
-    if (cMatch) {
-      const code = cMatch[1].toUpperCase();
-      const prefix = code.slice(0, 2);
-      if (prefix === "MS") return { kind: "staff", code };
-      if (prefix === "MH") return { kind: "hotel", code };
-      if (prefix === "MG" || prefix === "MO") return { kind: "person", code };
-      return null;
-    }
-
-    const staffMatch = path.match(/\/staff\/([^/]+)$/);
-    if (staffMatch) return { kind: "staff", code: staffMatch[1] };
-
-    const hotelMatch = path.match(/\/h\/([^/]+)$/);
-    if (hotelMatch) return { kind: "hotel", code: hotelMatch[1] };
-
-    const hotel = url.searchParams.get("hotel") ?? undefined;
-    const staff = url.searchParams.get("staff") ?? undefined;
-    if (staff) return { kind: "staff", code: staff };
-    if (hotel) return { kind: "hotel", code: hotel };
-  } catch {
-    /* not a URL */
-  }
-
-  const uuid = text.match(
-    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
-  );
-  if (uuid) return { kind: "hotel", code: uuid[0] };
-
-  if (/^MH-\d+$/i.test(text)) return { kind: "hotel", code: text.toUpperCase() };
-  if (/^MS-\d+$/i.test(text)) return { kind: "staff", code: text.toUpperCase() };
-
-  return null;
-}
+type Staff = {
+  id: string;
+  full_name: string | null;
+  moybirr_id: string | null;
+  position: string | null;
+  rating: number | null;
+  rating_count: number | null;
+};
 
 function PayPage() {
   const { t } = useLang();
   const { user } = useAuth();
   const qc = useQueryClient();
-
-  const search = Route.useSearch();
-  const [hotelId, setHotelId] = useState<string | null>(search.hotel ?? null);
-  const [selectedHotelData, setSelectedHotelData] = useState<HotelOption | null>(null);
-  const [staffId, setStaffId] = useState<string | null>(search.staff ?? null);
-  const [bill, setBill] = useState("");
-  const [tip, setTip] = useState("");
-  const [hotelQuery, setHotelQuery] = useState("");
-  const [showHotelSearch, setShowHotelSearch] = useState(!search.hotel);
-  const [staffName, setStaffName] = useState("");
-  const [stars, setStars] = useState(0);
-  const [hotelStars, setHotelStars] = useState(0);
-  const [hotelComment, setHotelComment] = useState("");
-
   const { status, locate } = useMyLocation();
 
-  const trimmedQuery = hotelQuery.trim();
+  // -------- Selected hotel + staff --------
+  const [hotel, setHotel] = useState<Hotel | null>(null);
+  const [staff, setStaff] = useState<Staff | null>(null);
 
-  // Hotel search — try code, then name, then phone
-  const hotelSearch = useQuery({
-    queryKey: ["hotel-search-exact", trimmedQuery.toUpperCase()],
-    enabled: trimmedQuery.length >= 3,
-    queryFn: async () => {
-      const q = trimmedQuery;
-      const qUpper = trimmedQuery.toUpperCase();
+  // -------- Hotel search --------
+  const [searchQ, setSearchQ] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<Hotel[]>([]);
 
-      const codeRes = await supabase
-        .from("hotels_public")
-        .select("id,name,city,hotel_code")
-        .ilike("hotel_code", qUpper)
-        .limit(1);
-      if (codeRes.data && codeRes.data.length > 0) return codeRes.data;
+  // -------- Bill / tip / ratings --------
+  const [bill, setBill] = useState("");
+  const [tip, setTip] = useState("");
+  const [stars, setStars] = useState(0);
+  const [hotelStars, setHotelStars] = useState(0);
+  const [comment, setComment] = useState("");
 
-      const nameRes = await supabase
-        .from("hotels_public")
-        .select("id,name,city,hotel_code")
-        .ilike("name", q)
-        .limit(1);
-      if (nameRes.data && nameRes.data.length > 0) return nameRes.data;
+  const billNum = Number(bill || 0);
+  const tipNum = Number(tip || 0);
+  const total = billNum + tipNum;
 
-      try {
-        const phoneRes = await supabase
-          .from("hotels_public")
-          .select("id,name,city,hotel_code")
-          .ilike("phone", q)
-          .limit(1);
-        if (phoneRes.data && phoneRes.data.length > 0) return phoneRes.data;
-      } catch {
-        /* ignore */
-      }
+  // -------- Search hotels manually --------
+  const runSearch = async () => {
+    const q = searchQ.trim();
+    if (q.length < 3) return;
+    setSearching(true);
+    const qUpper = q.toUpperCase();
 
-      return [];
-    },
-  });
+    // Try code first
+    const byCode = await supabase
+      .from("hotels_public")
+      .select("id,name,city,hotel_code")
+      .ilike("hotel_code", qUpper)
+      .limit(5);
 
-  const hotelResults = (hotelSearch.data ?? []) as HotelOption[];
-  const showingNoMatch =
-    trimmedQuery.length >= 3 &&
-    !hotelSearch.isLoading &&
-    hotelResults.length === 0;
+    if (byCode.data && byCode.data.length > 0) {
+      setSearchResults(byCode.data as Hotel[]);
+      setSearching(false);
+      return;
+    }
 
-  // Load all staff for the selected hotel
-  const staff = useQuery({
-    queryKey: ["staff-public", hotelId],
-    enabled: !!hotelId,
+    // Then name
+    const byName = await supabase
+      .from("hotels_public")
+      .select("id,name,city,hotel_code")
+      .ilike("name", `%${q}%`)
+      .limit(5);
+
+    setSearchResults((byName.data ?? []) as Hotel[]);
+    setSearching(false);
+  };
+
+  // -------- Load staff for selected hotel --------
+  const staffQuery = useQuery({
+    queryKey: ["pay-staff", hotel?.id],
+    enabled: !!hotel?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("staff_public")
-        .select("id,position,rating,rating_count,hotel_id,full_name,photo_url,moybirr_id")
-        .eq("hotel_id", hotelId!)
-        .limit(30);
+        .select("id,full_name,moybirr_id,position,rating,rating_count")
+        .eq("hotel_id", hotel!.id)
+        .limit(50);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as Staff[];
     },
   });
 
+  // -------- Wallet balance --------
   const wallet = useQuery({
     queryKey: ["wallet", user?.id],
     queryFn: async () => {
@@ -195,160 +139,80 @@ function PayPage() {
     enabled: !!user,
   });
 
-  const billNum = Number(bill || 0);
-  const tipNum = Number(tip || 0);
-  const total = billNum + tipNum;
-
+  // -------- Pay --------
   const pay = useMutation({
     mutationFn: async () => {
-      if (!hotelId) throw new Error(t("pay_page.error_scan_hotel"));
+      if (!hotel) throw new Error("Select a hotel first");
+      if (billNum <= 0) throw new Error("Enter a bill amount");
+      if (tipNum > 0 && !staff) throw new Error("Select a staff member for the tip");
+
       const { error } = await supabase.rpc("pay_service", {
-        _hotel_id: hotelId,
-        _staff_profile_id: staffId as unknown as string,
+        _hotel_id: hotel.id,
+        _staff_profile_id: staff?.id ?? null,
         _amount: billNum,
         _tip: tipNum,
       });
       if (error) throw error;
-      if (staffId && stars > 0) {
-        const { error: rateError } = await supabase.rpc("rate_staff", {
-          _staff_profile_id: staffId,
+
+      if (staff && stars > 0) {
+        await supabase.rpc("rate_staff", {
+          _staff_profile_id: staff.id,
           _booking_id: null as unknown as string,
           _stars: stars,
-          _comment: staffName ? `Served by ${staffName}` : "",
+          _comment: staff.full_name ? `Served by ${staff.full_name}` : "",
         });
-        if (rateError) throw rateError;
       }
 
-      if (hotelStars > 0) {
-        const { data: authData } = await supabase.auth.getUser();
-        const guestId = authData.user?.id;
-        if (guestId) {
-          const { error: hotelRateErr } = await supabase.from("hotel_ratings").insert({
-            guest_id: guestId,
-            hotel_id: hotelId,
-            stars: hotelStars,
-            comment: hotelComment.trim() || null,
-          });
-          if (hotelRateErr) throw hotelRateErr;
-        }
+      if (hotelStars > 0 && user) {
+        await supabase.from("hotel_ratings").insert({
+          guest_id: user.id,
+          hotel_id: hotel.id,
+          stars: hotelStars,
+          comment: comment.trim() || null,
+        });
       }
     },
     onSuccess: () => {
-      toast.success(
-        tipNum > 0
-          ? t("pay_page.success_with_tip", {
-              total: formatETB(total),
-              tip: formatETB(tipNum),
-              staff: staffName || t("staff_member"),
-            })
-          : t("pay_page.success_no_tip", { total: formatETB(total) }),
-      );
+      toast.success(`Paid ${formatETB(total)} — thank you!`);
       setBill("");
       setTip("");
       setStars(0);
       setHotelStars(0);
-      setHotelComment("");
+      setComment("");
+      setStaff(null);
       void qc.invalidateQueries({ queryKey: ["wallet"] });
       void qc.invalidateQueries({ queryKey: ["transactions"] });
-      void qc.invalidateQueries({ queryKey: ["staff-public"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const handleScan = async (text: string) => {
-    const parsed = parseQrValue(text);
-    if (!parsed) {
-      toast.error(t("pay_page.error_invalid_qr"));
+  const handleQr = async (text: string) => {
+    // Extract MH-XXXXXX from QR text
+    const m = text.match(/MH-\d+/i);
+    if (!m) {
+      toast.error("This QR code isn't a Moybirr hotel code");
       return;
     }
-
-    if (parsed.kind === "hotel") {
-      if (/^MH-/i.test(parsed.code)) {
-        window.location.href = `/c/${parsed.code.toUpperCase()}`;
-        return;
-      }
-      const { data } = await supabase
-        .from("hotels_public")
-        .select("hotel_code")
-        .eq("id", parsed.code)
-        .maybeSingle();
-      if (data?.hotel_code) {
-        window.location.href = `/c/${data.hotel_code.toUpperCase()}`;
-        return;
-      }
-      toast.error(t("pay_page.error_hotel_not_found"));
+    const code = m[0].toUpperCase();
+    const { data } = await supabase
+      .from("hotels_public")
+      .select("id,name,city,hotel_code")
+      .eq("hotel_code", code)
+      .maybeSingle();
+    if (!data) {
+      toast.error("Hotel not found");
       return;
     }
-
-    if (parsed.kind === "person") {
-      toast.info(t("pay_page.info_person_qr", { code: parsed.code }));
-      return;
-    }
-
-    if (parsed.kind === "staff") {
-      const code = parsed.code;
-      const isUuid = /^[0-9a-f]{8}-/i.test(code);
-
-      let staffRow: {
-        id: string;
-        hotel_id: string | null;
-        full_name: string | null;
-      } | null = null;
-
-      if (isUuid) {
-        const { data } = await supabase
-          .from("staff_public")
-          .select("id,hotel_id,full_name")
-          .eq("id", code)
-          .maybeSingle();
-        staffRow = data;
-      } else {
-        const { data } = await supabase
-          .from("staff_public")
-          .select("id,hotel_id,full_name")
-          .eq("moybirr_id", code.toUpperCase())
-          .maybeSingle();
-        staffRow = data;
-      }
-
-      if (!staffRow) {
-        toast.error(t("pay_page.error_staff_not_found"));
-        return;
-      }
-
-      setStaffId(staffRow.id);
-      if (staffRow.hotel_id) setHotelId(staffRow.hotel_id);
-      setShowHotelSearch(false);
-      if (staffRow.full_name) setStaffName(staffRow.full_name);
-      toast.success(
-        t("pay_page.success_staff_qr", {
-          staff: staffRow.full_name ?? t("staff_member"),
-        }),
-      );
-    }
+    setHotel(data as Hotel);
+    setStaff(null);
+    setSearchQ("");
+    setSearchResults([]);
+    toast.success(`Hotel set: ${data.name}`);
   };
 
-  // Filter staff list
-  const staffResults = (() => {
-    const q = staffName.trim().toLowerCase();
-    const all = staff.data ?? [];
-    if (!q) return all;
-    return all.filter((s) => {
-      return (
-        (s.full_name ?? "").toLowerCase().includes(q) ||
-        (s.position ?? "").toLowerCase().includes(q) ||
-        (s.moybirr_id ?? "").toLowerCase().includes(q)
-      );
-    });
-  })();
-
-  // Display value for hotel input
-  const displayValue =
-    selectedHotelData && !showHotelSearch
-      ? `${selectedHotelData.name}${
-          selectedHotelData.city ? " · " + selectedHotelData.city : ""
-        }`
-      : hotelQuery;
+  // ============================================================
+  // RENDER
+  // ============================================================
 
   return (
     <>
@@ -358,19 +222,22 @@ function PayPage() {
       />
 
       <div className="-mt-6 space-y-4 px-4 pb-6">
+        {/* -------- HOTEL SELECTION -------- */}
         <Card className="shadow-card p-5">
           <div className="flex items-center gap-3">
             <div className="flex size-12 items-center justify-center rounded-xl bg-accent">
               <QrCode className="size-6 text-primary" />
             </div>
             <div>
-              <p className="text-sm font-semibold">{t("pay_page.scan_title")}</p>
-              <p className="text-xs text-muted-foreground">{t("pay_page.scan_desc")}</p>
+              <p className="text-sm font-semibold">Scan QR or choose hotel</p>
+              <p className="text-xs text-muted-foreground">
+                Point camera at the table QR, or search below
+              </p>
             </div>
           </div>
 
           <div className="mt-4">
-            <QrScanButton onResult={handleScan} label={t("pay_page.open_camera")} />
+            <QrScanButton onResult={handleQr} label="Open camera & scan" />
           </div>
 
           <button
@@ -378,106 +245,80 @@ function PayPage() {
             className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-muted p-2.5 text-xs font-medium"
           >
             <Navigation className="size-3.5 text-primary" />
-            {status === "locating"
-              ? t("pay_page.locating")
-              : status === "ready"
-                ? t("pay_page.sorted_by_distance")
-                : status === "denied"
-                  ? t("pay_page.location_blocked")
-                  : t("pay_page.use_gps")}
+            {status === "locating" ? "Locating…" : "Use my location"}
           </button>
 
-          <div className="mt-4 space-y-2">
-            <Label>{t("pay_page.hotel_label")}</Label>
-
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="pl-9 pr-10"
-                value={displayValue}
-                onChange={(e) => {
-                  setHotelQuery(e.target.value);
-                  setShowHotelSearch(true);
-                  setHotelId(null);
-                  setSelectedHotelData(null);
-                  setStaffId(null);
-                  setStaffName("");
-                }}
-                onFocus={() => setShowHotelSearch(true)}
-                placeholder={t("pay_page.hotel_search_placeholder")}
-              />
-
-              {selectedHotelData && !showHotelSearch ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHotelId(null);
-                    setSelectedHotelData(null);
-                    setStaffId(null);
-                    setStaffName("");
-                    setHotelQuery("");
-                    setShowHotelSearch(true);
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear selection"
-                >
-                  <X className="size-4" />
-                </button>
-              ) : null}
-            </div>
-
-            {showHotelSearch ? (
-              <div className="space-y-2">
-                {trimmedQuery.length > 0 && trimmedQuery.length < 3 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Type at least 3 characters…
-                  </p>
-                ) : null}
-
-                {hotelSearch.isLoading && trimmedQuery.length >= 3 ? (
-                  <p className="text-xs text-muted-foreground">Searching…</p>
-                ) : null}
-
-                {showingNoMatch && !hotelSearch.isLoading ? (
-                  <p className="text-xs text-muted-foreground">
-                    {t("pay_page.no_hotel_match")}
-                  </p>
-                ) : null}
-
-                {hotelResults.length > 0 ? (
-                  <div className="grid gap-2">
-                    {hotelResults.map((h) => (
-                      <button
-                        key={h.id}
-                        onClick={() => {
-                          setHotelId(h.id);
-                          setSelectedHotelData(h);
-                          setStaffId(null);
-                          setStaffName("");
-                          setHotelQuery("");
-                          setShowHotelSearch(false);
-                        }}
-                        className="rounded-xl border border-primary bg-accent p-3 text-left text-sm transition-colors hover:bg-accent/80"
-                      >
-                        <span className="font-medium">{h.name}</span>
-                        <span className="text-muted-foreground"> · {h.city}</span>
-                        {h.hotel_code ? (
-                          <span className="ml-2 font-mono text-xs text-muted-foreground">
-                            {h.hotel_code}
-                          </span>
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
+          {/* Selected hotel */}
+          {hotel ? (
+            <div className="mt-4 flex items-center justify-between rounded-xl border border-primary bg-accent p-3">
+              <div>
+                <p className="text-sm font-semibold">{hotel.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {hotel.city ?? ""} · {hotel.hotel_code ?? ""}
+                </p>
               </div>
-            ) : null}
-          </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setHotel(null);
+                  setStaff(null);
+                }}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Clear hotel"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="relative mt-4">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  value={searchQ}
+                  onChange={(e) => setSearchQ(e.target.value)}
+                  onBlur={runSearch}
+                  onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                  placeholder="Search hotel name or MH- code"
+                />
+              </div>
+
+              {searching ? (
+                <p className="mt-2 text-xs text-muted-foreground">Searching…</p>
+              ) : null}
+
+              {searchResults.length > 0 ? (
+                <div className="mt-2 grid gap-2">
+                  {searchResults.map((h) => (
+                    <button
+                      key={h.id}
+                      type="button"
+                      onClick={() => {
+                        setHotel(h);
+                        setStaff(null);
+                        setSearchQ("");
+                        setSearchResults([]);
+                      }}
+                      className="rounded-xl border border-primary bg-accent p-3 text-left text-sm"
+                    >
+                      <span className="font-medium">{h.name}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · {h.city} · {h.hotel_code}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          )}
         </Card>
 
-        <Card className="shadow-card p-5">
+        {/* -------- BILL + TIP + STAFF -------- */}
+        <Card className="shadow-card space-y-4 p-5">
+          {/* Bill */}
           <div className="space-y-1.5">
-            <Label htmlFor="bill">{t("staff_actions.service_bill")} (ETB)</Label>
+            <Label htmlFor="bill">Service bill (ETB)</Label>
             <Input
               id="bill"
               inputMode="decimal"
@@ -487,30 +328,35 @@ function PayPage() {
             />
           </div>
 
-          <div className="mt-5">
+          {/* Tip */}
+          <div>
             <p className="text-sm font-semibold">
               <Gift className="mr-1.5 inline size-4 text-primary" />
-              {t("staff_actions.add_tip")}
+              Add tip (optional)
             </p>
             <div className="mt-2 grid grid-cols-4 gap-2">
               {tipPercents.map((p) => (
                 <button
                   key={p}
-                  onClick={() => setTip(String(Math.round(billNum * (p / 100) * 100) / 100))}
+                  type="button"
+                  onClick={() =>
+                    setTip(String(Math.round(billNum * (p / 100) * 100) / 100))
+                  }
                   className="rounded-xl border border-border p-2.5 text-sm font-semibold"
                 >
                   {p}%
                 </button>
               ))}
               <button
+                type="button"
                 onClick={() => setTip("")}
                 className="rounded-xl border border-border p-2.5 text-sm font-semibold"
               >
-                {t("pay_page.clear")}
+                Clear
               </button>
             </div>
             <div className="mt-3 space-y-1.5">
-              <Label htmlFor="tip">{t("pay_page.custom_tip")}</Label>
+              <Label htmlFor="tip">Custom tip (ETB)</Label>
               <Input
                 id="tip"
                 inputMode="decimal"
@@ -521,160 +367,160 @@ function PayPage() {
             </div>
           </div>
 
-          <div className="mt-5 space-y-2">
-            <Label htmlFor="staff-name">{t("pay_page.staff_id_label")}</Label>
+          {/* -------- STAFF PICKER -------- */}
+          <div>
+            <Label>
+              Who served you?{" "}
+              {tipNum > 0 ? (
+                <span className="text-destructive">(required for tip)</span>
+              ) : (
+                <span className="font-normal text-muted-foreground">(optional)</span>
+              )}
+            </Label>
 
-            {!hotelId ? (
-              <p className="text-xs text-muted-foreground">
-                Select a hotel first to see its staff.
+            {!hotel ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Select a hotel first.
               </p>
-            ) : (staff.data ?? []).length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No staff registered for this hotel yet.
+            ) : staffQuery.isLoading ? (
+              <p className="mt-2 text-xs text-muted-foreground">Loading staff…</p>
+            ) : (staffQuery.data ?? []).length === 0 ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                No staff registered at this hotel yet.
               </p>
             ) : (
-              <>
-                <Input
-                  id="staff-name"
-                  value={staffName}
-                  onChange={(e) => setStaffName(e.target.value.toUpperCase())}
-                  placeholder={t("pay_page.staff_id_placeholder")}
-                  autoComplete="off"
-                  autoCapitalize="characters"
-                  autoCorrect="off"
-                  spellCheck={false}
-                />
-
-                <div className="grid gap-2">
-                  {staffResults.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      {t("pay_page.no_staff_match")}
-                    </p>
-                  ) : (
-                    staffResults.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          setStaffId(s.id);
-                          setStaffName(s.moybirr_id ?? s.full_name ?? t("staff_member"));
-                        }}
-                        className={`flex items-center justify-between rounded-xl border p-3 text-left transition-colors ${
-                          staffId === s.id
-                            ? "border-primary bg-accent"
-                            : "border-border hover:bg-muted"
-                        }`}
-                      >
-                        <span>
-                          <span className="text-sm font-medium">
-                            {s.full_name || t("staff_member")}
-                          </span>
-                          <span className="block font-mono text-xs text-muted-foreground">
-                            {s.moybirr_id}
-                          </span>
+              <div className="mt-2 grid gap-2">
+                {(staffQuery.data ?? []).map((s) => {
+                  const isSelected = staff?.id === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setStaff(isSelected ? null : s)}
+                      className={`flex items-center justify-between rounded-xl border p-3 text-left transition-colors ${
+                        isSelected
+                          ? "border-primary bg-accent"
+                          : "border-border hover:bg-muted"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="flex size-9 items-center justify-center rounded-full bg-primary/10">
+                          <UserCircle2 className="size-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold">
+                            {s.full_name || "Staff"}
+                          </p>
+                          <p className="font-mono text-[10px] text-muted-foreground">
+                            {s.moybirr_id ?? "—"} · {s.position ?? "staff"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Star className="size-3.5 fill-primary text-primary" />
+                        <span className="text-sm font-bold">
+                          {s.rating != null && Number(s.rating) > 0
+                            ? Number(s.rating).toFixed(1)
+                            : "New"}
                         </span>
-                        <span className="flex items-center gap-1 text-xs font-semibold">
-                          <Star className="size-3.5 fill-primary text-primary" />
-                          {Number(s.rating ?? 0).toFixed(1)}
-                        </span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
 
-          <div className="mt-5">
-            <Label>{t("pay_page.rate_hotel_label")}</Label>
-            <div className="mt-2 flex items-center gap-2">
+          {/* Rate staff (only if selected) */}
+          {staff ? (
+            <div className="space-y-1.5">
+              <Label>Rate {staff.full_name} (optional)</Label>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setStars(stars === n ? 0 : n)}
+                    className="p-0.5"
+                  >
+                    <Star
+                      className={`size-7 ${
+                        n <= stars
+                          ? "fill-primary text-primary"
+                          : "text-muted-foreground"
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Rate hotel */}
+          <div className="space-y-1.5">
+            <Label>Rate this place (optional)</Label>
+            <div className="flex gap-1">
               {[1, 2, 3, 4, 5].map((n) => (
                 <button
                   key={n}
                   type="button"
-                  aria-label={`${n} hotel stars`}
                   onClick={() => setHotelStars(hotelStars === n ? 0 : n)}
                   className="p-0.5"
                 >
                   <Star
                     className={`size-7 ${
-                      n <= hotelStars ? "fill-primary text-primary" : "text-muted-foreground"
+                      n <= hotelStars
+                        ? "fill-primary text-primary"
+                        : "text-muted-foreground"
                     }`}
                   />
                 </button>
               ))}
-              {hotelStars > 0 ? (
-                <span className="text-xs text-muted-foreground">{hotelStars}/5</span>
-              ) : null}
             </div>
             <Input
               className="mt-2"
-              value={hotelComment}
-              onChange={(e) => setHotelComment(e.target.value)}
-              placeholder={t("pay_page.hotel_comment_placeholder")}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Optional comment"
             />
           </div>
 
-          <div className="mt-5">
-            <Label>
-              {t("staff_actions.rate_staff")} {staffName ? `— ${staffName}` : ""}
-            </Label>
-            <div className="mt-2 flex items-center gap-2">
-              {[1, 2, 3, 4, 5].map((n) => (
-                <button
-                  key={n}
-                  aria-label={`${n} star`}
-                  onClick={() => setStars(stars === n ? 0 : n)}
-                  className="p-0.5"
-                >
-                  <Star
-                    className={`size-7 ${
-                      n <= stars ? "fill-primary text-primary" : "text-muted-foreground"
-                    }`}
-                  />
-                </button>
-              ))}
-              {stars > 0 ? (
-                <span className="text-xs text-muted-foreground">
-                  {stars}/5 — {t("pay_page.saved_with_payment")}
-                </span>
-              ) : null}
-            </div>
-            {stars > 0 && !staffId ? (
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {t("pay_page.pick_staff_hint")}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="mt-5 rounded-xl bg-muted p-4">
+          {/* Total */}
+          <div className="rounded-xl bg-muted p-4">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">{t("staff_actions.service_bill")}</span>
+              <span className="text-muted-foreground">Service bill → hotel</span>
               <span>{formatETB(billNum)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">{t("pay_page.tip_to_staff")}</span>
+              <span className="text-muted-foreground">
+                Tip → {staff?.full_name ?? "staff"}
+              </span>
               <span>{formatETB(tipNum)}</span>
             </div>
             <div className="mt-2 flex justify-between border-t border-border pt-2 text-base font-bold">
-              <span>{t("booking.total")}</span>
+              <span>Total</span>
               <span>{formatETB(total)}</span>
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              {t("pay_page.commission_note")}
-            </p>
           </div>
 
+          {/* Pay */}
           <Button
-            className="mt-4 w-full"
+            className="w-full"
             size="lg"
-            disabled={pay.isPending || total <= 0 || !hotelId}
+            disabled={
+              pay.isPending ||
+              !hotel ||
+              total <= 0 ||
+              (tipNum > 0 && !staff)
+            }
             onClick={() => pay.mutate()}
           >
-            {t("pay_page.pay_amount", { amount: formatETB(total) })}
+            {pay.isPending ? "Paying…" : `Pay ${formatETB(total)}`}
           </Button>
-          {tipNum > 0 && !staffId ? (
-            <Badge variant="secondary" className="mt-3">
-              {t("pay_page.select_staff_for_tip")}
+
+          {tipNum > 0 && !staff ? (
+            <Badge variant="destructive" className="mt-2">
+              Select who served you to send the tip
             </Badge>
           ) : null}
         </Card>
