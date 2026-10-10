@@ -72,7 +72,6 @@ function PayPage() {
   const [hotelStars, setHotelStars] = useState(0);
   const [comment, setComment] = useState("");
 
-  // Staff ID typing
   const [staffIdInput, setStaffIdInput] = useState("");
   const [staffLookupBusy, setStaffLookupBusy] = useState(false);
   const [staffLookupError, setStaffLookupError] = useState<string | null>(null);
@@ -110,15 +109,31 @@ function PayPage() {
 
   // -------- Staff of selected hotel --------
   const staffQuery = useQuery({
-    queryKey: ["pay-staff", hotel?.id],
+    queryKey: ["pay-staff", hotel?.id ?? "none"],
     enabled: !!hotel?.id,
+    staleTime: 0,
+    refetchOnMount: "always",
     queryFn: async () => {
+      if (!hotel?.id) return [];
+
       const { data, error } = await supabase
         .from("staff_public")
         .select("id,full_name,moybirr_id,position,rating,rating_count")
-        .eq("hotel_id", hotel!.id)
+        .eq("hotel_id", hotel.id)
         .limit(50);
-      if (error) throw error;
+
+      if (error) {
+        console.error("[staffQuery] error:", error);
+        throw error;
+      }
+
+      console.log(
+        "[staffQuery] hotel:",
+        hotel.id,
+        "found:",
+        data?.length ?? 0,
+        data,
+      );
       return (data ?? []) as Staff[];
     },
   });
@@ -137,7 +152,6 @@ function PayPage() {
 
       const qUpper = q.toUpperCase();
 
-      // Try Moybirr ID first
       const byId = await supabase
         .from("staff_public")
         .select("id,full_name,moybirr_id,position,rating,rating_count")
@@ -150,7 +164,6 @@ function PayPage() {
         return;
       }
 
-      // Then name
       const byName = await supabase
         .from("staff_public")
         .select("id,full_name,moybirr_id,position,rating,rating_count")
@@ -192,14 +205,12 @@ function PayPage() {
       if (billNum <= 0 && tipNum <= 0) {
         throw new Error("Enter a bill or tip");
       }
-      // Tip is OPTIONAL. But if tip > 0 and staff is set, tip goes to staff.
-      // If tip > 0 and no staff, tip is ignored (falls back to hotel).
 
       const { error } = await supabase.rpc("pay_service", {
         _hotel_id: hotel.id,
         _staff_profile_id: staff?.id ?? null,
         _amount: billNum,
-        _tip: staff ? tipNum : 0, // only send tip if staff selected
+        _tip: staff ? tipNum : 0,
       });
       if (error) throw error;
 
@@ -412,7 +423,17 @@ function PayPage() {
             </div>
           </div>
 
-          {/* STAFF PICKER */}
+          {/* ⚠️ DEBUG PANEL — remove after fixing */}
+          <div className="rounded bg-yellow-100 p-2 text-[10px] text-black">
+            <p>hotel id: {hotel?.id ?? "none"}</p>
+            <p>staff loading: {String(staffQuery.isLoading)}</p>
+            <p>
+              staff error:{" "}
+              {staffQuery.error ? String(staffQuery.error) : "none"}
+            </p>
+            <p>staff count: {(staffQuery.data ?? []).length}</p>
+          </div>
+
           <div>
             <Label>
               Who served you?{" "}
@@ -421,7 +442,6 @@ function PayPage() {
               </span>
             </Label>
 
-            {/* Selected staff */}
             {staff ? (
               <div className="mt-2 flex items-center justify-between rounded-xl border border-primary bg-accent p-3">
                 <div className="flex items-center gap-2">
@@ -464,7 +484,6 @@ function PayPage() {
               </p>
             ) : (
               <>
-                {/* Typed staff ID */}
                 <Input
                   className="mt-2"
                   value={staffIdInput}
@@ -479,14 +498,15 @@ function PayPage() {
                 />
 
                 {staffLookupBusy ? (
-                  <p className="mt-1 text-xs text-muted-foreground">Looking up…</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Looking up…
+                  </p>
                 ) : staffLookupError ? (
                   <p className="mt-1 text-xs text-destructive">
                     {staffLookupError}
                   </p>
                 ) : null}
 
-                {/* Tappable staff cards */}
                 {staffQuery.isLoading ? (
                   <p className="mt-2 text-xs text-muted-foreground">
                     Loading staff…
@@ -536,7 +556,6 @@ function PayPage() {
             )}
           </div>
 
-          {/* Rate staff */}
           {staff ? (
             <div className="space-y-1.5">
               <Label>Rate {staff.full_name} (optional)</Label>
@@ -561,7 +580,6 @@ function PayPage() {
             </div>
           ) : null}
 
-          {/* Rate hotel */}
           <div className="space-y-1.5">
             <Label>Rate this place (optional)</Label>
             <div className="flex gap-1">
@@ -590,15 +608,18 @@ function PayPage() {
             />
           </div>
 
-          {/* Total */}
           <div className="rounded-xl bg-muted p-4">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Service bill → hotel</span>
+              <span className="text-muted-foreground">
+                Service bill → hotel
+              </span>
               <span>{formatETB(billNum)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">
-                Tip → {staff?.full_name ?? (tipNum > 0 ? "staff not selected" : "—")}
+                Tip →{" "}
+                {staff?.full_name ??
+                  (tipNum > 0 ? "staff not selected" : "—")}
               </span>
               <span>{formatETB(staff ? tipNum : 0)}</span>
             </div>
