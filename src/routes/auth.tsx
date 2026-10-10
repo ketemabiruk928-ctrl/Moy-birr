@@ -30,6 +30,22 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+function getReturnPath(): string | null {
+  try {
+    return sessionStorage.getItem("moybirr_return_to");
+  } catch {
+    return null;
+  }
+}
+
+function clearReturnPath() {
+  try {
+    sessionStorage.removeItem("moybirr_return_to");
+  } catch {
+    /* ignore */
+  }
+}
+
 function AuthPage() {
   const { t, lang, setLang } = useLang();
   const { session, refresh } = useAuth();
@@ -47,27 +63,31 @@ function AuthPage() {
   const [staffHotelName, setStaffHotelName] = useState("");
   const [staffHotelCode, setStaffHotelCode] = useState("");
 
+  // If already logged in, send them where they came from (or home)
   if (session) {
-    void navigate({ to: "/" });
+    const returnTo = getReturnPath();
+    if (returnTo) {
+      clearReturnPath();
+      void navigate({ to: returnTo });
+    } else {
+      void navigate({ to: "/" });
+    }
   }
 
-  // Build role options from translations
+  const goAfterAuth = () => {
+    const returnTo = getReturnPath();
+    if (returnTo) {
+      clearReturnPath();
+      void navigate({ to: returnTo });
+    } else {
+      void navigate({ to: "/" });
+    }
+  };
+
   const roles: { value: Role; label: string; hint: string }[] = [
-    {
-      value: "guest",
-      label: t("role_guest"),
-      hint: t("role_guest_hint"),
-    },
-    {
-      value: "staff",
-      label: t("role_staff"),
-      hint: t("role_staff_hint"),
-    },
-    {
-      value: "owner",
-      label: t("role_owner"),
-      hint: t("role_owner_hint"),
-    },
+    { value: "guest", label: t("role_guest"), hint: t("role_guest_hint") },
+    { value: "staff", label: t("role_staff"), hint: t("role_staff_hint") },
+    { value: "owner", label: t("role_owner"), hint: t("role_owner_hint") },
   ];
 
   const login = async () => {
@@ -83,7 +103,7 @@ function AuthPage() {
     }
     await refresh();
     toast.success(t("success_welcome_back"));
-    void navigate({ to: "/" });
+    goAfterAuth();
   };
 
   const register = async () => {
@@ -168,14 +188,13 @@ function AuthPage() {
     setBusy(false);
     await refresh();
     toast.success(t("success_account_created"));
-    void navigate({ to: "/" });
+    goAfterAuth();
   };
 
   return (
     <div className="min-h-screen bg-background">
       <div className="bg-gradient-primary px-6 pt-14 pb-12 text-primary-foreground">
         <div className="mx-auto w-full max-w-lg">
-          {/* Language picker at the top right */}
           <div className="flex justify-end">
             <div className="flex items-center gap-1.5 rounded-full border border-primary-foreground/40 bg-transparent px-3 py-1">
               <Globe className="size-3.5" />
@@ -322,7 +341,6 @@ function AuthPage() {
                 {t("auth.register")}
               </Button>
 
-              {/* Legal acceptance */}
               <p className="text-center text-[11px] text-muted-foreground">
                 By signing up you agree to our{" "}
                 <Link to="/terms" className="underline text-primary">
